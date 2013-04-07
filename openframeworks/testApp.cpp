@@ -50,46 +50,49 @@ static void yuv422_to_rgba(const uint8_t *yuv_src, const int stride, uint8_t *ds
 
 //--------------------------------------------------------------
 void testApp::setup(){
-    int rc;
-    num_eyes = ps3eye_list_devices(&list);
+    using namespace ps3eye;
     
     camFrameCount = 0;
     camFpsLastSampleFrame = 0;
     camFpsLastSampleTime = 0;
     camFps = 0;
     
-    if(num_eyes)
+    // list out the devices
+    std::vector<PS3EYECam::PS3EYERef> devices( PS3EYECam::getDevices() );
+    
+    if(devices.size())
     {
-        eye_cam = &list[0];
-        rc = ps3eye_init(eye_cam, &ps3eye_modes[1], 60);
-        rc = ps3eye_start(eye_cam);
+        eye = devices.at(0);
+        bool res = eye->init(640, 480, 60);
+        eye->start();
         
-        videoFrame 	= new unsigned char[eye_cam->mode->width*eye_cam->mode->height*4];
-        videoTexture.allocate(eye_cam->mode->width,eye_cam->mode->height, GL_RGBA);
+        videoFrame 	= new unsigned char[eye->getWidth()*eye->getHeight()*4];
+        videoTexture.allocate(eye->getWidth(), eye->getHeight(), GL_RGBA);
         
         threadUpdate.start();
     }
 }
 void testApp::exit(){
     threadUpdate.stop();
-    ps3eye_free_devices(&list, num_eyes);
+    // You should stop before exiting
+    // otherwise the app will keep working
+    if(eye) eye->stop();
 	delete[] videoFrame;
 }
 
 //--------------------------------------------------------------
 void testApp::update()
 {
-    if(num_eyes)
+    if(eye)
     {
-        const uint8_t* frame;
-        int isNewFrame = ps3eye_request_frame(eye_cam, &frame);
+        bool isNewFrame = eye->isNewFrame();
         if(isNewFrame)
         {
-            yuv422_to_rgba(frame, eye_cam->mode->bytesperline, videoFrame, eye_cam->mode->width,eye_cam->mode->height);
-            videoTexture.loadData(videoFrame, eye_cam->mode->width,eye_cam->mode->height, GL_RGBA);
+            yuv422_to_rgba(eye->getLastFramePointer(), eye->getRowBytes(), videoFrame, eye->getWidth(),eye->getHeight());
+            videoTexture.loadData(videoFrame, eye->getWidth(),eye->getHeight(), GL_RGBA);
         }
         
-        camFrameCount += isNewFrame;
+        camFrameCount += isNewFrame ? 1: 0;
         float timeNow = ofGetElapsedTimeMillis();
         if( timeNow > camFpsLastSampleTime + 1000 ) {
             uint32_t framesPassed = camFrameCount - camFpsLastSampleFrame;
@@ -106,7 +109,7 @@ void testApp::update()
 void testApp::draw()
 {
     ofSetHexColor(0xffffff);
-    videoTexture.draw(0,0,eye_cam->mode->width,eye_cam->mode->height);
+    videoTexture.draw(0,0,eye->getWidth(),eye->getHeight());
     
     string str = "app fps: ";
 	str += ofToString(ofGetFrameRate(), 2);

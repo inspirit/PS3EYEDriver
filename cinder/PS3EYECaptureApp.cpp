@@ -6,7 +6,7 @@
 
 #include "ciUI.h"
 
-#include "ps3eye_driver.h"
+#include "ps3eye.h"
 
 using namespace ci;
 using namespace ci::app;
@@ -91,9 +91,7 @@ class PS3EYECaptureApp : public AppBasic {
     eyeFPS *eyeFpsLab;
     void guiEvent(ciUIEvent *event);
 
-	struct ps3eye_cam *list;
-	struct ps3eye_cam *eye_cam;
-	int num_eyes;
+    ps3eye::PS3EYECam::PS3EYERef eye;
 
 	bool					mShouldQuit;
 	std::thread				mThread;
@@ -111,13 +109,14 @@ class PS3EYECaptureApp : public AppBasic {
 };
 
 void PS3EYECaptureApp::setup()
-{	
-    int rc;
+{
+    using namespace ps3eye;
 
 	mShouldQuit = false;
 
-	num_eyes = ps3eye_list_devices(&list);
-	console() << "found " << num_eyes << " cameras" << std::endl;
+    // list out the devices
+    std::vector<PS3EYECam::PS3EYERef> devices( PS3EYECam::getDevices() );
+	console() << "found " << devices.size() << " cameras" << std::endl;
 
 	mTimer = Timer(true);
 	mCamFrameCount = 0;
@@ -130,17 +129,17 @@ void PS3EYECaptureApp::setup()
     float gh = 15;
     float slw = 320 - 20;
 
-    if(num_eyes > 0)
-    {
-		eye_cam = &list[0];
-        rc = ps3eye_init(eye_cam, &ps3eye_modes[1], 60);
-        console() << "init eye result " << rc << std::endl;
-        rc = ps3eye_start(eye_cam);
-        console() << "start eye result " << rc << std::endl;
+    if(devices.size())
+    {   
+        eye = devices.at(0);
+        bool res = eye->init(640, 480, 60);
+        console() << "init eye result " << res << std::endl;
+        eye->start();
+        
 
-		frame_bgra = new uint8_t[eye_cam->mode->width*eye_cam->mode->height*4];
-		mFrame = Surface(frame_bgra, eye_cam->mode->width, eye_cam->mode->height, eye_cam->mode->width*4, SurfaceChannelOrder::BGRA);
-		memset(frame_bgra, 0, eye_cam->mode->width*eye_cam->mode->height*4);
+		frame_bgra = new uint8_t[eye->getWidth()*eye->getHeight()*4];
+		mFrame = Surface(frame_bgra, eye->getWidth(), eye->getHeight(), eye->getWidth()*4, SurfaceChannelOrder::BGRA);
+		memset(frame_bgra, 0, eye->getWidth()*eye->getHeight()*4);
 		
 		// create and launch the thread
 		mThread = thread( bind( &PS3EYECaptureApp::eyeUpdateThreadFn, this ) );
@@ -153,14 +152,14 @@ void PS3EYECaptureApp::setup()
         // controls
         gui->addWidgetDown(new ciUIToggle(gh, gh, false, "auto gain"));
         gui->addWidgetRight(new ciUIToggle(gh, gh, false, "auto white balance"));
-        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 63, eye_cam->gain, "gain"));
-        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 63, eye_cam->sharpness, "sharpness"));
-        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 255, eye_cam->exposure, "exposure"));
-        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 255, eye_cam->brightness, "brightness"));
-        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 255, eye_cam->contrast, "contrast"));
-        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 255, eye_cam->hue, "hue"));
-        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 255, eye_cam->blueblc, "blue balance"));
-        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 255, eye_cam->redblc, "red balance"));
+        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 63, eye->getGain(), "gain"));
+        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 63, eye->getSharpness(), "sharpness"));
+        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 255, eye->getExposure(), "exposure"));
+        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 255, eye->getBrightness(), "brightness"));
+        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 255, eye->getContrast(), "contrast"));
+        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 255, eye->getHue(), "hue"));
+        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 255, eye->getBlueBalance(), "blue balance"));
+        gui->addWidgetDown(new ciUISlider(slw, gh, 0, 255, eye->getRedBalance(), "red balance"));
         
         gui->registerUIEvents(this, &PS3EYECaptureApp::guiEvent);
     }
@@ -172,64 +171,61 @@ void PS3EYECaptureApp::guiEvent(ciUIEvent *event)
     if(name == "auto gain")
     {
         ciUIToggle *t = (ciUIToggle * ) event->widget;
-        ps3eye_set_auto_gain(eye_cam, t->getValue() ? 1 : 0);
+        eye->setAutogain(t->getValue());
     }
     else if(name == "auto white balance")
     {
         ciUIToggle *t = (ciUIToggle * ) event->widget;
-        ps3eye_set_auto_white_balance(eye_cam, t->getValue() ? 1 : 0);
+        eye->setAutoWhiteBalance(t->getValue());
     }
     else if(name == "gain")
     {
         ciUISlider *s = (ciUISlider *) event->widget;
-        ps3eye_set_gain(eye_cam, static_cast<uint8_t>(s->getScaledValue()));
+        eye->setGain(static_cast<uint8_t>(s->getScaledValue()));
     }
     else if(name == "sharpness")
     {
         ciUISlider *s = (ciUISlider *) event->widget;
-        ps3eye_set_sharpness(eye_cam, static_cast<uint8_t>(s->getScaledValue()));
+        eye->setSharpness(static_cast<uint8_t>(s->getScaledValue()));
     }
     else if(name == "exposure")
     {
         ciUISlider *s = (ciUISlider *) event->widget;
-        ps3eye_set_exposure(eye_cam, static_cast<uint8_t>(s->getScaledValue()));
+        eye->setExposure(static_cast<uint8_t>(s->getScaledValue()));
     }
     else if(name == "brightness")
     {
         ciUISlider *s = (ciUISlider *) event->widget;
-        ps3eye_set_brightness(eye_cam, static_cast<uint8_t>(s->getScaledValue()));
+        eye->setBrightness(static_cast<uint8_t>(s->getScaledValue()));
     }
     else if(name == "contrast")
     {
         ciUISlider *s = (ciUISlider *) event->widget;
-        ps3eye_set_contrast(eye_cam, static_cast<uint8_t>(s->getScaledValue()));
+        eye->setContrast(static_cast<uint8_t>(s->getScaledValue()));
     }
     else if(name == "hue")
     {
         ciUISlider *s = (ciUISlider *) event->widget;
-        ps3eye_set_hue(eye_cam, static_cast<uint8_t>(s->getScaledValue()));
+        eye->setHue(static_cast<uint8_t>(s->getScaledValue()));
     }
     else if(name == "blue balance")
     {
         ciUISlider *s = (ciUISlider *) event->widget;
-        ps3eye_set_blue_balance(eye_cam, static_cast<uint8_t>(s->getScaledValue()));
+        eye->setBlueBalance(static_cast<uint8_t>(s->getScaledValue()));
     }
     else if(name == "red balance")
     {
         ciUISlider *s = (ciUISlider *) event->widget;
-        ps3eye_set_red_balance(eye_cam, static_cast<uint8_t>(s->getScaledValue()));
+        eye->setRedBalance(static_cast<uint8_t>(s->getScaledValue()));
     }
 }
 
 void PS3EYECaptureApp::eyeUpdateThreadFn()
 {
-	while( !mShouldQuit ) 
+	while( !mShouldQuit )
 	{
-		int res = ps3eye_update();
-		if(res != 0)
-		{
-			break;
-		}
+		bool res = ps3eye::PS3EYECam::updateDevices();
+        if(!res) break;
 	}
 }
 
@@ -237,27 +233,30 @@ void PS3EYECaptureApp::shutdown()
 {
 	mShouldQuit = true;
 	mThread.join();
-	ps3eye_free_devices(&list, num_eyes);
+    // You should stop before exiting
+    // otherwise the app will keep working
+    eye->stop();
+    //
 	delete[] frame_bgra;
 	delete gui;
 }
 
 void PS3EYECaptureApp::mouseDown( MouseEvent event )
 {
+    
 }
 
 void PS3EYECaptureApp::update()
 {
-    if(num_eyes)
+    if(eye)
     {
-        const uint8_t* frame;
-        int isNewFrame = ps3eye_request_frame(eye_cam, &frame);
+        bool isNewFrame = eye->isNewFrame();
         if(isNewFrame)
         {
-            yuv422_to_rgba(frame, eye_cam->mode->bytesperline, frame_bgra, mFrame.getWidth(), mFrame.getHeight());
+            yuv422_to_rgba(eye->getLastFramePointer(), eye->getRowBytes(), frame_bgra, mFrame.getWidth(), mFrame.getHeight());
             mTexture = gl::Texture( mFrame );
         }
-        mCamFrameCount += isNewFrame;
+        mCamFrameCount += isNewFrame ? 1 : 0;
         double now = mTimer.getSeconds();
         if( now > mCamFpsLastSampleTime + 1 ) {
             uint32_t framesPassed = mCamFrameCount - mCamFpsLastSampleFrame;

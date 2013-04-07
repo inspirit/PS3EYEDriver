@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ofMain.h"
-#include "ps3eye_driver.h"
+#include "ps3eye.h"
 
 class ps3eyeUpdate : public ofThread{
     
@@ -22,8 +22,8 @@ public:
     {
         while( isThreadRunning() != 0 )
         {
-            int res = ps3eye_update();
-            if(res != 0)
+            bool res = ps3eye::PS3EYECam::updateDevices();
+            if(!res)
             {
                 break;
             }
@@ -49,9 +49,7 @@ class testApp : public ofBaseApp{
 		void dragEvent(ofDragInfo dragInfo);
 		void gotMessage(ofMessage msg);
     
-        struct ps3eye_cam *list;
-        struct ps3eye_cam *eye_cam;
-        int num_eyes;
+        ps3eye::PS3EYECam::PS3EYERef eye;
     
         int camFrameCount;
         int camFpsLastSampleFrame;
