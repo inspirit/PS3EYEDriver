@@ -29,7 +29,11 @@
 
 #include <stdint.h>
 
+#if defined(DEBUG)
 #define debug(x...) fprintf(stdout,x)
+#else
+#define debug(x...) 
+#endif
 
 
 namespace ps3eye {
@@ -133,6 +137,16 @@ public:
 		blueblc = val;
 		sccb_reg_write(0x42, val);
 	}
+	void setFlip(bool horizontal = false, bool vertical = false) {
+        flip_h = horizontal;
+        flip_v = vertical;
+		uint8_t val = sccb_reg_read(0x0c);
+        val &= ~0xc0;
+        if (!horizontal) val |= 0x40;
+        if (!vertical) val |= 0x80;
+        sccb_reg_write(0x0c, val);
+	}
+    
 
     bool isStreaming() const { return is_streaming; }
 	bool isNewFrame() const;
@@ -141,7 +155,7 @@ public:
 	uint32_t getWidth() const { return frame_width; }
 	uint32_t getHeight() const { return frame_height; }
 	uint8_t getFrameRate() const { return frame_rate; }
-	uint32_t getRowBytes() const { return frame_width*2; }
+	uint32_t getRowBytes() const { return frame_stride; }
 
 	//
 	static const std::vector<PS3EYERef>& getDevices( bool forceRefresh = false );
@@ -175,6 +189,8 @@ private:
 	uint8_t contrast; // 0 <-> 255
 	uint8_t blueblc; // 0 <-> 255
 	uint8_t redblc; // 0 <-> 255
+    bool flip_h;
+    bool flip_v;
 	//
     bool is_streaming;
 

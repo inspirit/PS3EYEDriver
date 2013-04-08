@@ -437,12 +437,15 @@ public:
 		// we allocate max possible size
 		// 16 frames 
 		size_t stride = 640*2;
-		frame_size = stride*480;
-		frame_buffer = (uint8_t*)malloc(frame_size * 16 + 16384*2);
-		usb_buf = frame_buffer + frame_size * 16;
+		const size_t fsz = stride*480;
+		frame_buffer = (uint8_t*)malloc(fsz * 16 + 16384*2);
+		frame_buffer_end = frame_buffer + fsz * 16;
 
+        frame_data_start = frame_buffer;
+        frame_data_len = 0;
 		frame_complete_ind = 0;
 		frame_work_ind = 0;
+        frame_size = fsz;
 	}
 	~URBDesc()
 	{
@@ -451,28 +454,33 @@ public:
 		{
 			close_transfers();
 		}
-		free(frame_buffer);
+        if(frame_buffer != NULL)
+            free(frame_buffer);
+        frame_buffer = NULL;
 	}
 
-	bool start_transfers(libusb_device_handle *handle)
+	bool start_transfers(libusb_device_handle *handle, uint32_t curr_frame_size)
 	{
 		struct libusb_transfer *xfr0,*xfr1;
 		uint8_t* buff, *buff1;
 		uint8_t ep_addr;
 	    int bsize = 16384;
+        
+        frame_size = curr_frame_size;
 
 	    // bulk transfers
 	    xfr0 = libusb_alloc_transfer(0);
 	    xfr1 = libusb_alloc_transfer(0);
 
-	    buff = usb_buf;
+	    buff = frame_buffer_end;
 	    buff1 = buff + bsize;
+        memset(frame_buffer_end, 0, bsize*2);
 
 	    xfr[0] = xfr0;
 	    xfr[1] = xfr1;
 
 	    ep_addr = find_ep(libusb_get_device(handle));
-	    debug("found ep: %d\n", ep_addr);
+	    //debug("found ep: %d\n", ep_addr);
 
 	    libusb_clear_halt(handle, ep_addr);
 
@@ -505,24 +513,40 @@ public:
 	    }
 	}
 
-	uint8_t frame_add(enum gspca_packet_type packet_type, uint8_t frame_ind, const uint8_t *data, int len)
+	void frame_add(enum gspca_packet_type packet_type, const uint8_t *data, int len)
 	{
 	    int i;
 	    if (packet_type == FIRST_PACKET) 
 	    {
-	        frame_data_end = frame_buffer + frame_ind*frame_size;
+	        frame_data_start = frame_buffer + frame_work_ind*frame_size;
+            frame_data_len = 0;
 	    } 
-	    else if (last_packet_type == DISCARD_PACKET) 
+	    else
 	    {
-	        if (packet_type == LAST_PACKET)
-	            last_packet_type = packet_type;
-	        return frame_ind;
+            switch(last_packet_type)
+            {
+                case DISCARD_PACKET:
+                    if (packet_type == LAST_PACKET) {
+                        last_packet_type = packet_type;
+                        frame_data_len = 0;
+                    }
+                    return;
+                case LAST_PACKET:
+                    return;
+            }
 	    }
 
 	    /* append the packet to the frame buffer */
-	    if (len > 0) {
-            memcpy(frame_data_end, data, len);
-            frame_data_end += len;
+	    if (len > 0)
+        {
+            if(frame_data_len + len > frame_size)
+            {
+                packet_type = DISCARD_PACKET;
+                frame_data_len = 0;
+            } else {
+                memcpy(frame_data_start+frame_data_len, data, len);
+                frame_data_len += len;
+            }
 	    }
 
 	    last_packet_type = packet_type;
@@ -530,12 +554,12 @@ public:
 	    if (packet_type == LAST_PACKET) 
 	    {        
 	    	last_frame_time = getTickCount();
-	        frame_complete_ind = frame_ind;
-	        i = (frame_ind + 1) & 15;
-	        frame_ind = i;
+	        frame_complete_ind = frame_work_ind;
+	        i = (frame_work_ind + 1) & 15;
+	        frame_work_ind = i;            
+            frame_data_len = 0;
 	        //debug("frame completed %d\n", frame_complete_ind);
 	    }
-	    return frame_ind;
 	}
 
 	void pkt_scan(uint8_t *data, int len)
@@ -579,19 +603,23 @@ public:
 	        if (this_pts != last_pts || this_fid != last_fid) {
 	            if (last_packet_type == INTER_PACKET)
 	            {
-	                frame_work_ind = frame_add(LAST_PACKET, frame_work_ind, NULL, 0);
+	                frame_add(LAST_PACKET, NULL, 0);
 	            }
 	            last_pts = this_pts;
 	            last_fid = this_fid;
-	            frame_add(FIRST_PACKET, frame_work_ind, data + 12, len - 12);
+	            frame_add(FIRST_PACKET, data + 12, len - 12);
 	        } /* If this packet is marked as EOF, end the frame */
 	        else if (data[1] & UVC_STREAM_EOF) 
 	        {
 	            last_pts = 0;
-	            frame_work_ind = frame_add(LAST_PACKET, frame_work_ind, data + 12, len - 12);
+                if(frame_data_len + len - 12 != frame_size)
+                {
+                    goto discard;
+                }
+	            frame_add(LAST_PACKET, data + 12, len - 12);
 	        } else {
 	            /* Add the data from this payload */
-	            frame_add(INTER_PACKET, frame_work_ind, data + 12, len - 12);
+	            frame_add(INTER_PACKET, data + 12, len - 12);
 	        }
 
 
@@ -600,7 +628,7 @@ public:
 
 	discard:
 	        /* Discard data until a new frame starts. */
-	        frame_add(DISCARD_PACKET, frame_work_ind, NULL, 0);
+	        frame_add(DISCARD_PACKET, NULL, 0);
 	scan_next:
 	        remaining_len -= len;
 	        data += len;
@@ -614,9 +642,10 @@ public:
 	libusb_transfer *xfr[2];
 
 	uint8_t *frame_buffer;
-	uint8_t *usb_buf;
-	uint8_t *frame_data_end;
-	size_t frame_size;
+    uint8_t *frame_buffer_end;
+    uint8_t *frame_data_start;
+	uint32_t frame_data_len;
+	uint32_t frame_size;
 	uint8_t frame_complete_ind;
 	uint8_t frame_work_ind;
 
@@ -688,6 +717,8 @@ PS3EYECam::PS3EYECam(libusb_device *device)
 	contrast =  37;
 	blueblc = 128;
 	redblc = 128;
+    flip_h = false;
+    flip_v = false;
 
 	usb_buf = NULL;
 	handle_ = NULL;
@@ -738,6 +769,7 @@ bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate)
 		frame_height = 240;
 		frame_rate = std::max(desiredFrameRate, static_cast<uint8_t>(30));
 	}
+    frame_stride = frame_width * 2;
 	//
 
 	/* reset bridge */
@@ -775,8 +807,6 @@ bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate)
 	ov534_reg_write(0xe0, 0x09);
 	ov534_set_led(0);
 
-	ov534_set_frame_rate(frame_rate);
-
 	return true;
 }
 
@@ -804,14 +834,13 @@ void PS3EYECam::start()
 	setSharpness(sharpness);
 	setRedBalance(redblc);
 	setBlueBalance(blueblc);
-	//sd_setvflip(vflip);	
-	//sd_sethflip(hflip);
+    setFlip(flip_h, flip_v);
 
 	ov534_set_led(1);
 	ov534_reg_write(0xe0, 0x00); // start stream
 
 	// init and start urb
-	urb->start_transfers(handle_);
+	urb->start_transfers(handle_, frame_stride*frame_height);
 	last_qued_frame_time = 0;
     is_streaming = true;
 }
