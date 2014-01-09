@@ -7,7 +7,7 @@
 
 // define shared_ptr in std 
 
-#if defined( _MSC_VER ) && ( _MSC_VER >= 1600 )
+#if (defined( _MSC_VER ) && ( _MSC_VER >= 1600 )) || (__cplusplus >= 201103L)
     #include <memory>
 #else
     #include <tr1/memory>
