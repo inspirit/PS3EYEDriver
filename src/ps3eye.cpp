@@ -848,14 +848,14 @@ void PS3EYECam::start()
 void PS3EYECam::stop()
 {
     if(!is_streaming) return;
-    
-	// close urb
-	urb->close_transfers();
 
 	/* stop streaming data */
 	ov534_reg_write(0xe0, 0x09);
 	ov534_set_led(0);
     
+	// close urb
+	urb->close_transfers();
+
     is_streaming = false;
 }
 
