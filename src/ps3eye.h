@@ -5,21 +5,8 @@
 #include <cstdlib>
 #include <vector>
 
-// define shared_ptr in std 
+#include <memory>
 
-#if (defined( _MSC_VER ) && ( _MSC_VER >= 1600 )) || (__cplusplus >= 201103L)
-    #include <memory>
-#else
-    #include <tr1/memory>
-    namespace std {
-        using std::tr1::shared_ptr;
-        using std::tr1::weak_ptr;        
-        using std::tr1::static_pointer_cast;
-        using std::tr1::dynamic_pointer_cast;
-        using std::tr1::const_pointer_cast;
-        using std::tr1::enable_shared_from_this;
-    }
-#endif
 
 #include "libusb.h"
 
