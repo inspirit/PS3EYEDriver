@@ -723,6 +723,8 @@ PS3EYECam::PS3EYECam(libusb_device *device)
 	usb_buf = NULL;
 	handle_ = NULL;
 
+	is_streaming = false;
+
 	device_ = device;
 	mgrPtr = USBMgr::instance();
 	urb = std::shared_ptr<URBDesc>( new URBDesc() );
