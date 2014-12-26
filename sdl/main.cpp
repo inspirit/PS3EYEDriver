@@ -1,11 +1,11 @@
 /**
- * PS3EYEDriver Simple SDL example (no GL rendering yet)
+ * PS3EYEDriver Simple SDL 2 example, using OpenGL where available.
  * Thomas Perl <m@thp.io>; 2014-01-10
+ * Joseph Howse <josephhowse@nummist.com>; 2014-12-26
  **/
 
-#include <SDL.h>
+#include <SDL2/SDL.h>
 #include "ps3eye.h"
-#include "yuv422rgba.h"
 
 
 struct yuv422_buffer_t {
@@ -42,7 +42,7 @@ struct yuv422_buffers_t {
 
     ~yuv422_buffers_t()
     {
-        for (int i=0; i<count; i++) {
+        for (int i = 0; i < count; i++) {
             free(buffers[i].pixels);
         }
         free(buffers);
@@ -105,7 +105,8 @@ ps3eye_cam_thread(void *user_data)
 
     ctx->eye->start();
 
-    printf("w: %d, h: %d\n", ctx->eye->getWidth(), ctx->eye->getHeight());
+    printf("Camera mode: %dx%d@%d\n", ctx->eye->getWidth(),
+           ctx->eye->getHeight(), ctx->eye->getFrameRate());
 
     while (ctx->running) {
         ps3eye::PS3EYECam::updateDevices();
@@ -119,62 +120,99 @@ ps3eye_cam_thread(void *user_data)
 
         Uint32 now_ticks = SDL_GetTicks();
         if (now_ticks - ctx->last_ticks > 1000) {
-            printf("FPS: %.2f\n", 1000 * ctx->last_frames / (float(now_ticks - ctx->last_ticks)));
+            printf("FPS: %.2f\n", 1000 * ctx->last_frames /
+                                  (float(now_ticks - ctx->last_ticks)));
             ctx->last_ticks = now_ticks;
             ctx->last_frames = 0;
         }
     }
 
-    return 0;
+    return EXIT_SUCCESS;
+}
+
+void
+print_renderer_info(SDL_Renderer *renderer)
+{
+    SDL_RendererInfo renderer_info;
+    SDL_GetRendererInfo(renderer, &renderer_info);
+    printf("Renderer: %s\n", renderer_info.name);
 }
 
 int
 main(int argc, char *argv[])
 {
-    ps3eye_context ctx(640, 480, 60);
-
+    ps3eye_context ctx(320, 240, 187);
     if (!ctx.hasDevices()) {
-        printf("No devices connected.\n");
-        return 1;
+        printf("No PS3 Eye camera connected\n");
+        return EXIT_FAILURE;
+    }
+    ctx.eye->setFlip(true); /* mirrored left-right */
+
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        printf("Failed to initialize SDL: %s\n", SDL_GetError());
+        return EXIT_FAILURE;
     }
 
-    SDL_Thread *thread = SDL_CreateThread(ps3eye_cam_thread, (void *)&ctx);
+    SDL_Window *window = SDL_CreateWindow(
+            "PS3 Eye - SDL 2", SDL_WINDOWPOS_UNDEFINED,
+            SDL_WINDOWPOS_UNDEFINED, 640, 480, 0);
+    if (window == NULL) {
+        printf("Failed to create window: %s\n", SDL_GetError());
+        return EXIT_FAILURE;
+    }
 
-    SDL_Init(SDL_INIT_VIDEO);
-    SDL_Surface *surface = SDL_SetVideoMode(ctx.eye->getWidth(), ctx.eye->getHeight(), 0, 0);
+    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1,
+                                                SDL_RENDERER_PRESENTVSYNC);
+    if (renderer == NULL) {
+        printf("Failed to create renderer: %s\n", SDL_GetError());
+        SDL_DestroyWindow(window);
+        return EXIT_FAILURE;
+    }
+    SDL_RenderSetLogicalSize(renderer, ctx.eye->getWidth(),
+                             ctx.eye->getHeight());
+    print_renderer_info(renderer);
 
-    unsigned char *rgba = (unsigned char *)malloc(ctx.eye->getWidth() * ctx.eye->getHeight() * 4);
+    SDL_Texture *video_tex = SDL_CreateTexture(
+            renderer, SDL_PIXELFORMAT_YUY2, SDL_TEXTUREACCESS_STREAMING,
+            ctx.eye->getWidth(), ctx.eye->getHeight());
+    if (video_tex == NULL) {
+        printf("Failed to create video texture: %s\n", SDL_GetError());
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        return EXIT_FAILURE;
+    }
 
-    SDL_Surface *rgba_surface = SDL_CreateRGBSurfaceFrom(rgba,
-            ctx.eye->getWidth(), ctx.eye->getHeight(), 32,
-            ctx.eye->getWidth() * 4,
-            0x000000ff, 0x0000ff00, 0x00ff0000, 0xff000000);
+    SDL_Thread *thread = SDL_CreateThread(ps3eye_cam_thread, "ps3eye_cam",
+                                          (void *)&ctx);
 
     SDL_Event e;
-    while (true) {
+    yuv422_buffer_t *last;
+    void *video_tex_pixels;
+    int pitch;
+    while (ctx.running) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) {
-                return 0;
+                ctx.running = false;
             }
         }
 
-        // TODO: proper thread signalling to wait for next available buffer
+        // TODO: Proper thread signalling to wait for next available buffer
         SDL_Delay(10);
-        yuv422_buffer_t *last = ctx.buffers.read();
+        last = ctx.buffers.read();
 
-        // TODO: Use OpenGL rendering instead of sw-based blitting, possibly
-        // decoding the yuv422 format directly in the fragment shader, or if
-        // we want to process the frame in the CPU, we could also have a
-        // separate thread for converting the pixel data (and an additional
-        // layer of buffering there)
-        yuv422_to_rgba(last->pixels, last->stride, rgba, last->width, last->height);
-        // TODO: Use RGB surface instead of RGBA surface
-        SDL_BlitSurface(rgba_surface, NULL, surface, NULL);
-        SDL_Flip(surface);
+        SDL_LockTexture(video_tex, NULL, &video_tex_pixels, &pitch);
+        memcpy(video_tex_pixels, last->pixels, last->size);
+        SDL_UnlockTexture(video_tex);
+
+        SDL_RenderCopy(renderer, video_tex, NULL, NULL);
+        SDL_RenderPresent(renderer);
     }
 
-    ctx.running = true;
     SDL_WaitThread(thread, NULL);
 
-    return 0;
+    SDL_DestroyTexture(video_tex);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+
+    return EXIT_SUCCESS;
 }
