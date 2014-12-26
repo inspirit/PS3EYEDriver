@@ -168,7 +168,7 @@ private:
 	void release();
 
 	// usb ops
-	void ov534_set_frame_rate(uint8_t frame_rate);
+	uint8_t ov534_set_frame_rate(uint8_t frame_rate, bool dry_run = false);
 	void ov534_set_led(int status);
 	void ov534_reg_write(uint16_t reg, uint8_t val);
 	uint8_t ov534_reg_read(uint16_t reg);

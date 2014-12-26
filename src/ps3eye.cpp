@@ -533,6 +533,8 @@ public:
                     return;
                 case LAST_PACKET:
                     return;
+                default:
+                    break;
             }
 	    }
 
@@ -765,12 +767,11 @@ bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate)
 	{
 		frame_width = 640;
 		frame_height = 480;
-		frame_rate = std::max(desiredFrameRate, static_cast<uint8_t>(15));
 	} else {
 		frame_width = 320;
 		frame_height = 240;
-		frame_rate = std::max(desiredFrameRate, static_cast<uint8_t>(30));
 	}
+	frame_rate = ov534_set_frame_rate(desiredFrameRate, true);
     frame_stride = frame_width * 2;
 	//
 
@@ -935,8 +936,8 @@ void PS3EYECam::ov534_set_led(int status)
 	}
 }
 
-/* set framerate */
-void PS3EYECam::ov534_set_frame_rate(uint8_t frame_rate)
+/* validate frame rate and (if not dry run) set it */
+uint8_t PS3EYECam::ov534_set_frame_rate(uint8_t frame_rate, bool dry_run)
 {
      int i;
      struct rate_s {
@@ -954,12 +955,16 @@ void PS3EYECam::ov534_set_frame_rate(uint8_t frame_rate)
              {15, 0x03, 0x41, 0x04},
      };
      static const struct rate_s rate_1[] = { /* 320x240 */
+             {205, 0x01, 0xc1, 0x02}, /* 205 FPS: video is partly corrupt */
+             {187, 0x01, 0x81, 0x02}, /* 187 FPS or below: video is valid */
+             {150, 0x01, 0xc1, 0x04},
+             {137, 0x02, 0xc1, 0x02},
              {125, 0x02, 0x81, 0x02},
              {100, 0x02, 0xc1, 0x04},
              {75, 0x03, 0xc1, 0x04},
              {60, 0x04, 0xc1, 0x04},
              {50, 0x02, 0x41, 0x04},
-             {40, 0x03, 0x41, 0x04},
+             {37, 0x03, 0x41, 0x04},
              {30, 0x04, 0x41, 0x04},
      };
 
@@ -975,13 +980,15 @@ void PS3EYECam::ov534_set_frame_rate(uint8_t frame_rate)
                      break;
              r++;
      }
- 
-     
-     sccb_reg_write(0x11, r->r11);
-     sccb_reg_write(0x0d, r->r0d);
-     ov534_reg_write(0xe5, r->re5);
+
+     if (!dry_run) {
+         sccb_reg_write(0x11, r->r11);
+         sccb_reg_write(0x0d, r->r0d);
+         ov534_reg_write(0xe5, r->re5);
+    }
 
      debug("frame_rate: %d\n", r->fps);
+     return r->fps;
 }
 
 void PS3EYECam::ov534_reg_write(uint16_t reg, uint8_t val)
