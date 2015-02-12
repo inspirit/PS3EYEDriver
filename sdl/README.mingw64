@@ -1,0 +1,67 @@
+This simple application now works in Windows 8.1 64-bit.
+
+Prerequisites
+-------------
+
+1. MinGW64
+	I use the latest tdm64-gcc (4.9.2-3) from here: http://tdm-gcc.tdragon.net/download
+	Add MinGW's binary to your system path (done by default when installing tdm distribution).
+	
+2. Optional - MSys-git
+	I prefer to work in BASH instead of CMD prompt when possible.
+	For this simple project, bash is only necessary to get `mingw32-make clean` to work. Everything else should work from command prompt.
+
+3. libusb-1.0
+	Download the latest Windows binaries from http://libusb.info/ (Tested with libusb-1.0.19-rc1-win)
+	Unpack next to PS3EYEDriver.
+	Rename the directory to libusb-1.0 (i.e., cut off the version number).
+	See below for directory layout.
+	
+4. SDL2
+	Download the latest Development Libraries from http://www.libsdl.org/download-2.0.php (Tested with SDL2-devel-2.0.3-mingw.tar.gz)
+	Unpack next to PS3EYEDriver.
+	Rename the directory to SDL2.
+	Move the include files so that #include <SDL/xxx.h> works.
+		`mkdir ../../SDL2/include/SDL2`
+		`mv ../../SDL2/include/* ../../SDL2/include/SDL2/`
+		
+5. A windows libusb interface to your PS3Eye
+	Read here: https://github.com/libusb/libusb/wiki/Windows#How_to_use_libusb_on_Windows
+	I used Zadig to install drivers for my camera. This was a little trickier than expected.
+	One one system (desktop) the camera works well if I install the WinUSB drivers or the libusbK drivers.
+	On another system (MacbookPro in Bootcamp), the camera works incredibly slowly using either the WinUSB or libusbK drivers. Only the libusb-win32 (lisusb0) drivers work.
+	
+
+Necessary directory structure
+
+-PS3EYEDriver
+	-src
+-libusb-1.0
+	-include
+		-libusb-1.0
+	-MinGW64
+		-static
+-SDL2
+	-x86_64-w64-mingw32
+		-bin
+		-include
+		-lib
+
+Build
+-----
+`mingw32-make`
+
+Use
+---
+You have to get libSDL2.dll on your path.
+If using MSys, try `export PATH=../../SDL2/x86_64-w64-mingw32/bin:$PATH`
+If using command prompt, try `SET PATH=../../SDL2/x86_64-w64-mingw32/bin;%PATH%`
+
+Then run `ps3eye_sdl.exe`
+
+Notes
+-----
+
+On both my Windows 8.1 x64 systems, libusb identifies two devices that match the PS3Eye VID and PID.
+If you attempt to open the first device then the program crashes. (Maybe this is the camera's microphone, even though it is managed by a non-libusb driver?)
+Only the second device works.
