@@ -7,7 +7,6 @@
 #include <SDL2/SDL.h>
 #include "ps3eye.h"
 
-
 struct yuv422_buffer_t {
     void update(const unsigned char *pixels, int stride, int width, int height)
     {
@@ -78,7 +77,11 @@ struct ps3eye_context {
         , last_frames(0)
     {
         if (hasDevices()) {
-            eye = devices[0];
+            #ifdef _WIN32
+                eye = devices[1];
+            #else
+                eye = devices[0];
+            #endif
             eye->init(width, height, fps);
         }
     }
