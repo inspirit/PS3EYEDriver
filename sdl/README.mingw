@@ -1,0 +1,21 @@
+To build
+
+1. Download and install mingw64
+	I prefer http://tdm-gcc.tdragon.net/download
+2. Open a MinGW command prompt (MSys bash preferred) and change to this directory.
+3. mingw32-make
+
+You may then run the file.
+
+To access the PS3EYE camera in Windows.
+1. Follow the directions here: https://github.com/libusb/libusb/wiki/Windows#How_to_use_libusb_on_Windows
+	I used Zadig to install libusb-win32 (libusb0). Any other drivers were too slow.
+
+Special Notes
+-------------
+
+On my two systems running Windows 8.1 x64, libusb enumerates two different devices that match the PS3Eye PID and VID.
+Shortly after enumeration, this error is generated:
+libusb: error [init_device] device '\\.\USB#VID_05AC&PID_0262&MI_01#6&2D47A44B&0&0001' is no longer connected!
+Then, attempting to open the first one crashes the program.
+The second one opens and runs well provided the libusb-win32 drivers are installed.
