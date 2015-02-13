@@ -29,6 +29,9 @@
 #ifndef PS3EYEDRIVER_H
 #define PS3EYEDRIVER_H
 
+#include <stdint.h>
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -81,6 +84,15 @@ ps3eye_grab_frame(ps3eye_t *eye, int *stride);
  **/
 void
 ps3eye_close(ps3eye_t *eye);
+    
+int
+ps3eye_set_parameters(ps3eye_t *eye, bool autogain, bool awb, uint8_t gain, uint8_t exposure,
+                        uint8_t contrast, uint8_t brightness);
+/**
+ * Sets all ps3eye parameters on device.
+ * gain: 0 <-> 63; exposure: 0 <-> 255; sharpness: 0 <-> 63; hue: 0 <-> 255;
+ * brightness: 0 <-> 255; contrast: 0 <-> 255; blueblc: 0 <-> 255; redblc: 0 <-> 255
+ **/
 
 #ifdef __cplusplus
 };

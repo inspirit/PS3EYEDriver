@@ -214,3 +214,33 @@ ps3eye_close(ps3eye_t *eye)
 {
     delete eye;
 }
+
+int
+ps3eye_set_parameters(ps3eye_t *eye, bool autogain, bool awb, uint8_t gain, uint8_t exposure,
+                      uint8_t contrast, uint8_t brightness)
+{
+    
+    int err = 0;
+    if (!ps3eye_context) {
+        return -1;
+    }
+    if (!eye) {
+        return -1;
+    }
+    
+    eye->eye->setAutogain(autogain);
+    eye->eye->setAutoWhiteBalance(awb);
+    eye->eye->setExposure(exposure);
+    //For the remaining, the values passed in do not seem to work well, so ignore.
+    //eye->eye->setGain(gain);
+    //eye->eye->setSharpness(sharpness);
+    //eye->eye->setContrast(contrast);
+    //eye->eye->setBrightness(brightness);
+    //eye->eye->setHue(hue);
+    //eye->eye->setRedBalance(redblc);
+    //eye->eye->setBlueBalance(blueblc);
+    //eye->eye->setFlip(flip_h, flip_v);
+    //ps3eye::PS3EYECam::updateDevices();
+    
+    return err;
+}
