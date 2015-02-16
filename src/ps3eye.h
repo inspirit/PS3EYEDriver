@@ -124,6 +124,8 @@ public:
 		blueblc = val;
 		sccb_reg_write(0x42, val);
 	}
+    bool getFlipH() const { return flip_h; }
+    bool getFlipV() const { return flip_v; }
 	void setFlip(bool horizontal = false, bool vertical = false) {
         flip_h = horizontal;
         flip_v = vertical;

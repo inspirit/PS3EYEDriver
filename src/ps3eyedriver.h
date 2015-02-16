@@ -29,14 +29,26 @@
 #ifndef PS3EYEDRIVER_H
 #define PS3EYEDRIVER_H
 
-#include <stdint.h>
-#include <stdbool.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct ps3eye_t ps3eye_t;
+
+typedef enum{
+    PS3EYE_AUTO_GAIN,           // [false, true]
+    PS3EYE_GAIN,                // [0, 63]
+    PS3EYE_AUTO_WHITEBALANCE,   // [false, true]
+    PS3EYE_EXPOSURE,            // [0, 255]
+    PS3EYE_SHARPNESS,           // [0 63]
+    PS3EYE_CONTRAST,            // [0, 255]
+    PS3EYE_BRIGHTNESS,          // [0, 255]
+    PS3EYE_HUE,                 // [0, 255]
+    PS3EYE_REDBALANCE,          // [0, 255]
+    PS3EYE_BLUEBALANCE,         // [0, 255]
+    PS3EYE_HFLIP,               // [false, true]
+    PS3EYE_VFLIP                // [false, true]
+} ps3eye_parameter;
 
 /**
  * Initialize and enumerate connected cameras.
@@ -84,15 +96,13 @@ ps3eye_grab_frame(ps3eye_t *eye, int *stride);
  **/
 void
 ps3eye_close(ps3eye_t *eye);
-    
-int
-ps3eye_set_parameters(ps3eye_t *eye, bool autogain, bool awb, uint8_t gain, uint8_t exposure,
-                        uint8_t contrast, uint8_t brightness);
+
 /**
- * Sets all ps3eye parameters on device.
- * gain: 0 <-> 63; exposure: 0 <-> 255; sharpness: 0 <-> 63; hue: 0 <-> 255;
- * brightness: 0 <-> 255; contrast: 0 <-> 255; blueblc: 0 <-> 255; redblc: 0 <-> 255
+ * Set a ps3eye_parameter to a value.
+ * Returns -1 if there is an error, otherwise 0.
  **/
+int
+ps3eye_set_parameter(ps3eye_t *eye, ps3eye_parameter param, int value);
 
 #ifdef __cplusplus
 };

@@ -216,31 +216,52 @@ ps3eye_close(ps3eye_t *eye)
 }
 
 int
-ps3eye_set_parameters(ps3eye_t *eye, bool autogain, bool awb, uint8_t gain, uint8_t exposure,
-                      uint8_t contrast, uint8_t brightness)
+ps3eye_set_parameter(ps3eye_t *eye, ps3eye_parameter param, int value)
 {
-    
-    int err = 0;
-    if (!ps3eye_context) {
-        return -1;
-    }
     if (!eye) {
         return -1;
     }
-    
-    eye->eye->setAutogain(autogain);
-    eye->eye->setAutoWhiteBalance(awb);
-    eye->eye->setExposure(exposure);
-    //For the remaining, the values passed in do not seem to work well, so ignore.
-    //eye->eye->setGain(gain);
-    //eye->eye->setSharpness(sharpness);
-    //eye->eye->setContrast(contrast);
-    //eye->eye->setBrightness(brightness);
-    //eye->eye->setHue(hue);
-    //eye->eye->setRedBalance(redblc);
-    //eye->eye->setBlueBalance(blueblc);
-    //eye->eye->setFlip(flip_h, flip_v);
-    //ps3eye::PS3EYECam::updateDevices();
-    
-    return err;
+
+    switch (param) {
+        case PS3EYE_AUTO_GAIN:
+            eye->eye->setAutogain(value > 0);
+            break;
+        case PS3EYE_GAIN:
+            eye->eye->setGain(value);
+            break;
+        case PS3EYE_AUTO_WHITEBALANCE:
+            eye->eye->setAutoWhiteBalance(value > 0);
+            break;
+        case PS3EYE_EXPOSURE:
+            eye->eye->setExposure(value);
+            break;
+        case PS3EYE_SHARPNESS:
+            eye->eye->setSharpness(value);
+            break;
+        case PS3EYE_CONTRAST:
+            eye->eye->setContrast(value);
+            break;
+        case PS3EYE_BRIGHTNESS:
+            eye->eye->setBrightness(value);
+            break;
+        case PS3EYE_HUE:
+            eye->eye->setHue(value);
+            break;
+        case PS3EYE_REDBALANCE:
+            eye->eye->setRedBalance(value);
+            break;
+        case PS3EYE_BLUEBALANCE:
+            eye->eye->setBlueBalance(value);
+            break;
+        case PS3EYE_HFLIP:
+            eye->eye->setFlip(value > 0, eye->eye->getFlipV());
+            break;
+        case PS3EYE_VFLIP:
+            eye->eye->setFlip(eye->eye->getFlipH(), value > 0);
+            break;
+        default:
+            break;
+    }
+
+    return 0;
 }
