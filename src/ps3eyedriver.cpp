@@ -216,6 +216,44 @@ ps3eye_close(ps3eye_t *eye)
 }
 
 int
+ps3eye_get_parameter(ps3eye_t *eye, ps3eye_parameter param)
+{
+    if (!eye) {
+        return -1;
+    }
+    switch (param) {
+    case PS3EYE_AUTO_GAIN:
+        return eye->eye->getAutogain();
+    case PS3EYE_GAIN:
+        return eye->eye->getGain();
+    case PS3EYE_AUTO_WHITEBALANCE:
+        return eye->eye->getAutoWhiteBalance();
+    case PS3EYE_EXPOSURE:
+        return eye->eye->getExposure();
+    case PS3EYE_SHARPNESS:
+        return eye->eye->getSharpness();
+    case PS3EYE_CONTRAST:
+        return eye->eye->getContrast();
+    case PS3EYE_BRIGHTNESS:
+        return eye->eye->getBrightness();
+    case PS3EYE_HUE:
+        return eye->eye->getHue();
+    case PS3EYE_REDBALANCE:
+        return eye->eye->getRedBalance();
+    case PS3EYE_BLUEBALANCE:
+        return eye->eye->getBlueBalance();
+    case PS3EYE_GREENBALANCE:
+        return eye->eye->getGreenBalance();
+    case PS3EYE_HFLIP:
+        return eye->eye->getFlipH();
+    case PS3EYE_VFLIP:
+        return eye->eye->getFlipV();
+    default:
+        return -1;
+    }
+}
+
+int
 ps3eye_set_parameter(ps3eye_t *eye, ps3eye_parameter param, int value)
 {
     if (!eye) {
@@ -252,6 +290,9 @@ ps3eye_set_parameter(ps3eye_t *eye, ps3eye_parameter param, int value)
             break;
         case PS3EYE_BLUEBALANCE:
             eye->eye->setBlueBalance(value);
+            break;
+        case PS3EYE_GREENBALANCE:
+            eye->eye->setGreenBalance(value);
             break;
         case PS3EYE_HFLIP:
             eye->eye->setFlip(value > 0, eye->eye->getFlipV());

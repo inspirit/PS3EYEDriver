@@ -16,5 +16,9 @@ LIBS += $(shell sdl-config --libs)
 $(TARGET): $(OBJECTS)
 	$(CXX) -o $@ $^ $(LIBS)
 
+debug: CXXFLAGS += -DDEBUG -g
+debug: CCFLAGS += -DDEBUG -g
+debug: $(TARGET)
+
 clean:
 	rm -f $(TARGET) $(OBJECTS)

@@ -3,6 +3,7 @@
 
 #if defined WIN32 || defined _WIN32 || defined WINCE
 	#include <windows.h>
+	#include <algorithm>
 #else
 	#include <sys/time.h>
 	#include <time.h>
@@ -399,6 +400,7 @@ int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
 {
     libusb_device *dev;
     libusb_device **devs;
+    libusb_device_handle *devhandle;
     int i = 0;
     int cnt;
 
@@ -414,9 +416,15 @@ int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
 		libusb_get_device_descriptor(dev, &desc);
 		if(desc.idVendor == PS3EYECam::VENDOR_ID && desc.idProduct == PS3EYECam::PRODUCT_ID)
 		{
-			list.push_back( PS3EYECam::PS3EYERef( new PS3EYECam(dev) ) );
-			libusb_ref_device(dev);
-			cnt++;
+			int err = libusb_open(dev, &devhandle);
+			if (err == 0)
+			{
+				libusb_close(devhandle);
+				list.push_back( PS3EYECam::PS3EYERef( new PS3EYECam(dev) ) );
+				libusb_ref_device(dev);
+				cnt++;
+
+			}
 		}
     }
 
@@ -523,7 +531,7 @@ public:
 	    } 
 	    else
 	    {
-            switch(last_packet_type)
+            switch(last_packet_type)  // ignore warning.
             {
                 case DISCARD_PACKET:
                     if (packet_type == LAST_PACKET) {
@@ -717,6 +725,7 @@ PS3EYECam::PS3EYECam(libusb_device *device)
 	contrast =  37;
 	blueblc = 128;
 	redblc = 128;
+	greenblc = 128;
     flip_h = false;
     flip_v = false;
 
@@ -778,10 +787,10 @@ bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate)
 	ov534_reg_write(0xe7, 0x3a);
 	ov534_reg_write(0xe0, 0x08);
 
-#if defined WIN32 || defined _WIN32 || defined WINCE
+#ifdef _MSC_VER
 	Sleep(100);
 #else
-    nanosleep((struct timespec[]){{0, 100000000}}, NULL);
+    nanosleep((const struct timespec[]){{0, 100000000}}, NULL);
 #endif
 
 	/* initialize the sensor address */
@@ -789,10 +798,10 @@ bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate)
 
 	/* reset sensor */
 	sccb_reg_write(0x12, 0x80);
-#if defined WIN32 || defined _WIN32 || defined WINCE
+#ifdef _MSC_VER
 	Sleep(10);
 #else    
-    nanosleep((struct timespec[]){{0, 10000000}}, NULL);
+    nanosleep((const struct timespec[]){{0, 10000000}}, NULL);
 #endif
 
 	/* probe the sensor */
@@ -836,6 +845,7 @@ void PS3EYECam::start()
 	setSharpness(sharpness);
 	setRedBalance(redblc);
 	setBlueBalance(blueblc);
+	setGreenBalance(greenblc);
     setFlip(flip_h, flip_v);
 
 	ov534_set_led(1);

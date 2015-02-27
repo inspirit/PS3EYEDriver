@@ -36,6 +36,8 @@ main(int argc, char *argv[])
     while (true) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) {
+                ps3eye_close(eye);
+                ps3eye_uninit();
                 return 0;
             }
         }
