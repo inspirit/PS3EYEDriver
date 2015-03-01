@@ -214,3 +214,54 @@ ps3eye_close(ps3eye_t *eye)
 {
     delete eye;
 }
+
+int
+ps3eye_set_parameter(ps3eye_t *eye, ps3eye_parameter param, int value)
+{
+    if (!eye) {
+        return -1;
+    }
+
+    switch (param) {
+        case PS3EYE_AUTO_GAIN:
+            eye->eye->setAutogain(value > 0);
+            break;
+        case PS3EYE_GAIN:
+            eye->eye->setGain(value);
+            break;
+        case PS3EYE_AUTO_WHITEBALANCE:
+            eye->eye->setAutoWhiteBalance(value > 0);
+            break;
+        case PS3EYE_EXPOSURE:
+            eye->eye->setExposure(value);
+            break;
+        case PS3EYE_SHARPNESS:
+            eye->eye->setSharpness(value);
+            break;
+        case PS3EYE_CONTRAST:
+            eye->eye->setContrast(value);
+            break;
+        case PS3EYE_BRIGHTNESS:
+            eye->eye->setBrightness(value);
+            break;
+        case PS3EYE_HUE:
+            eye->eye->setHue(value);
+            break;
+        case PS3EYE_REDBALANCE:
+            eye->eye->setRedBalance(value);
+            break;
+        case PS3EYE_BLUEBALANCE:
+            eye->eye->setBlueBalance(value);
+            break;
+        case PS3EYE_HFLIP:
+            eye->eye->setFlip(value > 0, eye->eye->getFlipV());
+            break;
+        case PS3EYE_VFLIP:
+            eye->eye->setFlip(eye->eye->getFlipH(), value > 0);
+            break;
+        default:
+            break;
+    }
+
+    return 0;
+}

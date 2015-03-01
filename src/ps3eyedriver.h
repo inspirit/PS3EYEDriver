@@ -35,6 +35,21 @@ extern "C" {
 
 typedef struct ps3eye_t ps3eye_t;
 
+typedef enum{
+    PS3EYE_AUTO_GAIN,           // [false, true]
+    PS3EYE_GAIN,                // [0, 63]
+    PS3EYE_AUTO_WHITEBALANCE,   // [false, true]
+    PS3EYE_EXPOSURE,            // [0, 255]
+    PS3EYE_SHARPNESS,           // [0 63]
+    PS3EYE_CONTRAST,            // [0, 255]
+    PS3EYE_BRIGHTNESS,          // [0, 255]
+    PS3EYE_HUE,                 // [0, 255]
+    PS3EYE_REDBALANCE,          // [0, 255]
+    PS3EYE_BLUEBALANCE,         // [0, 255]
+    PS3EYE_HFLIP,               // [false, true]
+    PS3EYE_VFLIP                // [false, true]
+} ps3eye_parameter;
+
 /**
  * Initialize and enumerate connected cameras.
  * Needs to be called once before all other API functions.
@@ -81,6 +96,13 @@ ps3eye_grab_frame(ps3eye_t *eye, int *stride);
  **/
 void
 ps3eye_close(ps3eye_t *eye);
+
+/**
+ * Set a ps3eye_parameter to a value.
+ * Returns -1 if there is an error, otherwise 0.
+ **/
+int
+ps3eye_set_parameter(ps3eye_t *eye, ps3eye_parameter param, int value);
 
 #ifdef __cplusplus
 };
