@@ -21,7 +21,7 @@ Prerequisites
 	Download the latest Development Libraries from http://www.libsdl.org/download-2.0.php (Tested with SDL2-devel-2.0.3-mingw.tar.gz)
 	Unpack next to PS3EYEDriver.
 	Rename the directory to SDL2.
-	Move the include files so that #include <SDL/xxx.h> works.
+	Move the include files so that #include <SDL2/xxx.h> works.
 		`mkdir ../../SDL2/include/SDL2`
 		`mv ../../SDL2/include/* ../../SDL2/include/SDL2/`
 		
