@@ -78,11 +78,7 @@ struct ps3eye_context {
         , last_frames(0)
     {
         if (hasDevices()) {
-			#ifdef _WIN32
-			eye = devices[1];
-			#else
             eye = devices[0];
-			#endif
             eye->init(width, height, fps);
         }
     }

@@ -400,6 +400,7 @@ int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
 {
     libusb_device *dev;
     libusb_device **devs;
+    libusb_device_handle *devhandle;
     int i = 0;
     int cnt;
 
@@ -415,9 +416,14 @@ int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
 		libusb_get_device_descriptor(dev, &desc);
 		if(desc.idVendor == PS3EYECam::VENDOR_ID && desc.idProduct == PS3EYECam::PRODUCT_ID)
 		{
-			list.push_back( PS3EYECam::PS3EYERef( new PS3EYECam(dev) ) );
-			libusb_ref_device(dev);
-			cnt++;
+            int err = libusb_open(dev, &devhandle);
+            if (err == 0)
+            {
+                libusb_close(devhandle);
+                list.push_back( PS3EYECam::PS3EYERef( new PS3EYECam(dev) ) );
+                libusb_ref_device(dev);
+                cnt++;
+            }
 		}
     }
 
