@@ -3,6 +3,7 @@
 
 #if defined WIN32 || defined _WIN32 || defined WINCE
 	#include <windows.h>
+	#include <algorithm>
 #else
 	#include <sys/time.h>
 	#include <time.h>
