@@ -31,9 +31,9 @@
 #include <stdint.h>
 
 #if defined(DEBUG)
-#define debug(x,...) fprintf(stdout,x)
+#define debug(...) fprintf(stdout, __VA_ARGS__)
 #else
-#define debug(x,...) 
+#define debug(...) 
 #endif
 
 
