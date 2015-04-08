@@ -423,6 +423,7 @@ int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
                 list.push_back( PS3EYECam::PS3EYERef( new PS3EYECam(dev) ) );
                 libusb_ref_device(dev);
                 cnt++;
+
             }
 		}
     }
@@ -726,6 +727,7 @@ PS3EYECam::PS3EYECam(libusb_device *device)
 	contrast =  37;
 	blueblc = 128;
 	redblc = 128;
+	greenblc = 128;
     flip_h = false;
     flip_v = false;
 
@@ -844,6 +846,7 @@ void PS3EYECam::start()
 	setSharpness(sharpness);
 	setRedBalance(redblc);
 	setBlueBalance(blueblc);
+	setGreenBalance(greenblc);
     setFlip(flip_h, flip_v);
 
 	ov534_set_led(1);
