@@ -3,6 +3,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 #include <memory>
@@ -17,9 +18,9 @@
 #include <stdint.h>
 
 #if defined(DEBUG)
-#define debug(x...) fprintf(stdout,x)
+#define debug(...) fprintf(stdout, __VA_ARGS__)
 #else
-#define debug(x...) 
+#define debug(...)
 #endif
 
 
@@ -124,6 +125,11 @@ public:
 		blueblc = val;
 		sccb_reg_write(0x42, val);
 	}
+	uint8_t getGreenBalance() const { return greenblc; }
+	void setGreenBalance(uint8_t val) {
+		greenblc = val;
+		sccb_reg_write(0x44, val);
+	}
     bool getFlipH() const { return flip_h; }
     bool getFlipV() const { return flip_v; }
 	void setFlip(bool horizontal = false, bool vertical = false) {
@@ -178,6 +184,7 @@ private:
 	uint8_t contrast; // 0 <-> 255
 	uint8_t blueblc; // 0 <-> 255
 	uint8_t redblc; // 0 <-> 255
+	uint8_t greenblc; // 0 <-> 255
     bool flip_h;
     bool flip_v;
 	//
