@@ -392,7 +392,11 @@ std::shared_ptr<USBMgr> USBMgr::instance()
 
 bool USBMgr::handleEvents()
 {
-	return (libusb_handle_events(instance()->usb_context) == 0);
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 50 * 1000; // ms
+
+    return (libusb_handle_events_timeout_completed(instance()->usb_context, &tv, NULL) == 0);
 }
 
 int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
@@ -414,11 +418,11 @@ int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
 		libusb_get_device_descriptor(dev, &desc);
 		if(desc.idVendor == PS3EYECam::VENDOR_ID && desc.idProduct == PS3EYECam::PRODUCT_ID)
 		{
-			list.push_back( PS3EYECam::PS3EYERef( new PS3EYECam(dev) ) );
-			libusb_ref_device(dev);
-			cnt++;
+                list.push_back( PS3EYECam::PS3EYERef( new PS3EYECam(dev) ) );
+                libusb_ref_device(dev);
+                cnt++;
+            }
 		}
-    }
 
     libusb_free_device_list(devs, 1);
 
@@ -975,9 +979,9 @@ void PS3EYECam::ov534_set_frame_rate(uint8_t frame_rate)
      }
  
      
-     sccb_reg_write(0x11, r->r11);
-     sccb_reg_write(0x0d, r->r0d);
-     ov534_reg_write(0xe5, r->re5);
+         sccb_reg_write(0x11, r->r11);
+         sccb_reg_write(0x0d, r->r0d);
+         ov534_reg_write(0xe5, r->re5);
 
      debug("frame_rate: %d\n", r->fps);
 }
