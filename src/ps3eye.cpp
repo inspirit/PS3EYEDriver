@@ -393,7 +393,10 @@ std::shared_ptr<USBMgr> USBMgr::instance()
 
 bool USBMgr::handleEvents()
 {
-	return (libusb_handle_events(instance()->usb_context) == 0);
+	struct timeval tv;
+	tv.tv_sec = 0;
+	tv.tv_usec = 50 * 1000; // ms
+	return (libusb_handle_events_timeout_completed(instance()->usb_context, &tv, NULL) == 0);
 }
 
 int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
