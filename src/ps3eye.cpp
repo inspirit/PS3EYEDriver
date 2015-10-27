@@ -409,8 +409,9 @@ int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
 
     cnt = libusb_get_device_list(instance()->usb_context, &devs);
 
-    if (cnt < 0)
-        debug("Error Device scan\n");
+	if (cnt < 0) {
+		debug("Error Device scan\n");
+	}
 
     cnt = 0;
     while ((dev = devs[i++]) != NULL) 
@@ -564,9 +565,8 @@ public:
 
 	    last_packet_type = packet_type;
 
-	    if (packet_type == LAST_PACKET) 
-	    {        
-	    	last_frame_time = getTickCount();
+	    if (packet_type == LAST_PACKET) {        
+	    	last_frame_time = (double)getTickCount();
 	        frame_complete_ind = frame_work_ind;
 	        i = (frame_work_ind + 1) & 15;
 	        frame_work_ind = i;            
@@ -1068,22 +1068,25 @@ void PS3EYECam::sccb_reg_write(uint8_t reg, uint8_t val)
 	ov534_reg_write(OV534_REG_WRITE, val);
 	ov534_reg_write(OV534_REG_OPERATION, OV534_OP_WRITE_3);
 
-	if (!sccb_check_status())
+	if (!sccb_check_status()) {
 		debug("sccb_reg_write failed\n");
+	}
 }
 
 
 uint8_t PS3EYECam::sccb_reg_read(uint16_t reg)
 {
-	ov534_reg_write(OV534_REG_SUBADDR, reg);
+	ov534_reg_write(OV534_REG_SUBADDR, (uint8_t)reg);
 	ov534_reg_write(OV534_REG_OPERATION, OV534_OP_WRITE_2);
-	if (!sccb_check_status())
+	if (!sccb_check_status()) {
 		debug("sccb_reg_read failed 1\n");
-
+	}
+	
 	ov534_reg_write(OV534_REG_OPERATION, OV534_OP_READ_2);
-	if (!sccb_check_status())
-		debug( "sccb_reg_read failed 2\n");
-
+	if (!sccb_check_status()) {
+		debug("sccb_reg_read failed 2\n");
+	}
+	
 	return ov534_reg_read(OV534_REG_READ);
 }
 /* output a bridge sequence (reg - val) */
