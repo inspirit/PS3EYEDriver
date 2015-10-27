@@ -581,7 +581,7 @@ public:
 
 	    payload_len = 2048; // bulk type
 	    do {
-	        len = std::min(remaining_len, payload_len);
+			len = (std::min)(remaining_len, payload_len);
 
 	        /* Payloads are prefixed with a UVC-style header.  We
 	           consider a frame to start when the FID toggles, or the PTS
