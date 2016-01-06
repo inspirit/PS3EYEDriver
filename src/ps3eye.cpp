@@ -855,6 +855,10 @@ void PS3EYECam::start()
 	urb->start_transfers(handle_, frame_stride*frame_height);
 	last_qued_frame_time = 0;
     is_streaming = true;
+    
+#if defined WIN32 || defined _WIN32 || defined WINCE
+    timeBeginPeriod(1);
+#endif
 }
 
 void PS3EYECam::stop()
@@ -869,6 +873,10 @@ void PS3EYECam::stop()
 	urb->close_transfers();
 
     is_streaming = false;
+    
+#if defined WIN32 || defined _WIN32 || defined WINCE
+    timeEndPeriod(1);
+#endif
 }
 
 bool PS3EYECam::isNewFrame() const
