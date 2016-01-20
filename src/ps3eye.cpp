@@ -394,11 +394,11 @@ std::shared_ptr<USBMgr> USBMgr::instance()
 
 bool USBMgr::handleEvents()
 {
-    struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 50 * 1000; // ms
+	struct timeval tv;
+	tv.tv_sec = 0;
+	tv.tv_usec = 50 * 1000; // ms
 
-    return (libusb_handle_events_timeout_completed(instance()->usb_context, &tv, NULL) == 0);
+	return (libusb_handle_events_timeout_completed(instance()->usb_context, &tv, NULL) == 0);
 }
 
 int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
@@ -411,8 +411,9 @@ int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
 
     cnt = libusb_get_device_list(instance()->usb_context, &devs);
 
-    if (cnt < 0)
+	if (cnt < 0) {
         debug("Error Device scan\n");
+	}
 
     cnt = 0;
     while ((dev = devs[i++]) != NULL) 
@@ -421,15 +422,15 @@ int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
 		libusb_get_device_descriptor(dev, &desc);
 		if(desc.idVendor == PS3EYECam::VENDOR_ID && desc.idProduct == PS3EYECam::PRODUCT_ID)
 		{
-			int err = libusb_open(dev, &devhandle);
-			if (err == 0)
-			{
-				libusb_close(devhandle);
-				list.push_back( PS3EYECam::PS3EYERef( new PS3EYECam(dev) ) );
-				libusb_ref_device(dev);
-				cnt++;
+            int err = libusb_open(dev, &devhandle);
+            if (err == 0)
+            {
+                libusb_close(devhandle);
+			list.push_back( PS3EYECam::PS3EYERef( new PS3EYECam(dev) ) );
+			libusb_ref_device(dev);
+			cnt++;
 
-			}
+            }
 		}
     }
 
@@ -546,6 +547,8 @@ public:
                     return;
                 case LAST_PACKET:
                     return;
+                default:
+                    break;
             }
 	    }
 
@@ -564,9 +567,8 @@ public:
 
 	    last_packet_type = packet_type;
 
-	    if (packet_type == LAST_PACKET) 
-	    {        
-	    	last_frame_time = getTickCount();
+	    if (packet_type == LAST_PACKET) {        
+	    	last_frame_time = (double)getTickCount();
 	        frame_complete_ind = frame_work_ind;
 	        i = (frame_work_ind + 1) & 15;
 	        frame_work_ind = i;            
@@ -584,7 +586,7 @@ public:
 
 	    payload_len = 2048; // bulk type
 	    do {
-	        len = std::min(remaining_len, payload_len);
+			len = (std::min)(remaining_len, payload_len);
 
 	        /* Payloads are prefixed with a UVC-style header.  We
 	           consider a frame to start when the FID toggles, or the PTS
@@ -779,12 +781,11 @@ bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate)
 	{
 		frame_width = 640;
 		frame_height = 480;
-		frame_rate = std::max(desiredFrameRate, static_cast<uint8_t>(15));
 	} else {
 		frame_width = 320;
 		frame_height = 240;
-		frame_rate = std::max(desiredFrameRate, static_cast<uint8_t>(30));
 	}
+	frame_rate = ov534_set_frame_rate(desiredFrameRate, true);
     frame_stride = frame_width * 2;
 	//
 
@@ -958,8 +959,8 @@ void PS3EYECam::ov534_set_led(int status)
 	}
 }
 
-/* set framerate */
-void PS3EYECam::ov534_set_frame_rate(uint8_t frame_rate)
+/* validate frame rate and (if not dry run) set it */
+uint8_t PS3EYECam::ov534_set_frame_rate(uint8_t frame_rate, bool dry_run)
 {
      int i;
      struct rate_s {
@@ -977,12 +978,16 @@ void PS3EYECam::ov534_set_frame_rate(uint8_t frame_rate)
              {15, 0x03, 0x41, 0x04},
      };
      static const struct rate_s rate_1[] = { /* 320x240 */
+             {205, 0x01, 0xc1, 0x02}, /* 205 FPS: video is partly corrupt */
+             {187, 0x01, 0x81, 0x02}, /* 187 FPS or below: video is valid */
+             {150, 0x01, 0xc1, 0x04},
+             {137, 0x02, 0xc1, 0x02},
              {125, 0x02, 0x81, 0x02},
              {100, 0x02, 0xc1, 0x04},
              {75, 0x03, 0xc1, 0x04},
              {60, 0x04, 0xc1, 0x04},
              {50, 0x02, 0x41, 0x04},
-             {40, 0x03, 0x41, 0x04},
+             {37, 0x03, 0x41, 0x04},
              {30, 0x04, 0x41, 0x04},
      };
 
@@ -999,12 +1004,14 @@ void PS3EYECam::ov534_set_frame_rate(uint8_t frame_rate)
              r++;
      }
  
-     
+     if (!dry_run) {
      sccb_reg_write(0x11, r->r11);
      sccb_reg_write(0x0d, r->r0d);
      ov534_reg_write(0xe5, r->re5);
+    }
 
      debug("frame_rate: %d\n", r->fps);
+     return r->fps;
 }
 
 void PS3EYECam::ov534_reg_write(uint16_t reg, uint8_t val)
@@ -1071,21 +1078,24 @@ void PS3EYECam::sccb_reg_write(uint8_t reg, uint8_t val)
 	ov534_reg_write(OV534_REG_WRITE, val);
 	ov534_reg_write(OV534_REG_OPERATION, OV534_OP_WRITE_3);
 
-	if (!sccb_check_status())
+	if (!sccb_check_status()) {
 		debug("sccb_reg_write failed\n");
+}
 }
 
 
 uint8_t PS3EYECam::sccb_reg_read(uint16_t reg)
 {
-	ov534_reg_write(OV534_REG_SUBADDR, reg);
+	ov534_reg_write(OV534_REG_SUBADDR, (uint8_t)reg);
 	ov534_reg_write(OV534_REG_OPERATION, OV534_OP_WRITE_2);
-	if (!sccb_check_status())
+	if (!sccb_check_status()) {
 		debug("sccb_reg_read failed 1\n");
+	}
 
 	ov534_reg_write(OV534_REG_OPERATION, OV534_OP_READ_2);
-	if (!sccb_check_status())
+	if (!sccb_check_status()) {
 		debug( "sccb_reg_read failed 2\n");
+	}
 
 	return ov534_reg_read(OV534_REG_READ);
 }
