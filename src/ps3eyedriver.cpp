@@ -113,7 +113,7 @@ struct ps3eye_t {
         , fps(fps)
         , buffers(2)
     {
-        eye->init(width, height, fps);
+        eye->init(width, height, (uint8_t)fps);
         eye->start();
         ps3eye_context->opened_devices.push_back(this);
     }
@@ -161,7 +161,7 @@ ps3eye_count_connected()
         return 0;
     }
 
-    return ps3eye_context->devices.size();
+    return (int)ps3eye_context->devices.size();
 }
 
 ps3eye_t *
@@ -265,34 +265,34 @@ ps3eye_set_parameter(ps3eye_t *eye, ps3eye_parameter param, int value)
             eye->eye->setAutogain(value > 0);
             break;
         case PS3EYE_GAIN:
-            eye->eye->setGain(value);
+            eye->eye->setGain((uint8_t)value);
             break;
         case PS3EYE_AUTO_WHITEBALANCE:
             eye->eye->setAutoWhiteBalance(value > 0);
             break;
         case PS3EYE_EXPOSURE:
-            eye->eye->setExposure(value);
+			eye->eye->setExposure((uint8_t)value);
             break;
         case PS3EYE_SHARPNESS:
-            eye->eye->setSharpness(value);
+			eye->eye->setSharpness((uint8_t)value);
             break;
         case PS3EYE_CONTRAST:
-            eye->eye->setContrast(value);
+			eye->eye->setContrast((uint8_t)value);
             break;
         case PS3EYE_BRIGHTNESS:
-            eye->eye->setBrightness(value);
+			eye->eye->setBrightness((uint8_t)value);
             break;
         case PS3EYE_HUE:
-            eye->eye->setHue(value);
+			eye->eye->setHue((uint8_t)value);
             break;
         case PS3EYE_REDBALANCE:
-            eye->eye->setRedBalance(value);
+			eye->eye->setRedBalance((uint8_t)value);
             break;
         case PS3EYE_BLUEBALANCE:
-            eye->eye->setBlueBalance(value);
+			eye->eye->setBlueBalance((uint8_t)value);
             break;
         case PS3EYE_GREENBALANCE:
-            eye->eye->setGreenBalance(value);
+			eye->eye->setGreenBalance((uint8_t)value);
             break;
         case PS3EYE_HFLIP:
             eye->eye->setFlip(value > 0, eye->eye->getFlipV());

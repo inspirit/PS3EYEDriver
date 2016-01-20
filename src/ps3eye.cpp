@@ -280,7 +280,7 @@ enum gspca_packet_type {
  */
 static uint8_t find_ep(struct libusb_device *device)
 {
-	const struct libusb_interface_descriptor *altsetting;
+	const struct libusb_interface_descriptor *altsetting = NULL;
     const struct libusb_endpoint_descriptor *ep;
 	struct libusb_config_descriptor *config;
     int i;
@@ -312,7 +312,7 @@ static uint8_t find_ep(struct libusb_device *device)
     return ep_addr;
 }
 
-// timestapms
+// timestamps
 // WIN and MAC only
 static int64_t getTickCount()
 {
@@ -322,24 +322,6 @@ static int64_t getTickCount()
     return (int64_t)counter.QuadPart;
 #else
     return (int64_t)mach_absolute_time();
-#endif
-}
-
-static double getTickFrequency()
-{
-#if defined WIN32 || defined _WIN32 || defined WINCE
-    LARGE_INTEGER freq;
-    QueryPerformanceFrequency(&freq);
-    return (double)freq.QuadPart;
-#else
-    static double freq = 0;
-    if( freq == 0 )
-    {
-        mach_timebase_info_data_t sTimebaseInfo;
-        mach_timebase_info(&sTimebaseInfo);
-        freq = sTimebaseInfo.denom*1e9/sTimebaseInfo.numer;
-    }
-    return freq;
 #endif
 }
 //
@@ -409,7 +391,7 @@ int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
     int i = 0;
     int cnt;
 
-    cnt = libusb_get_device_list(instance()->usb_context, &devs);
+    cnt = (int)libusb_get_device_list(instance()->usb_context, &devs);
 
 	if (cnt < 0) {
         debug("Error Device scan\n");
@@ -450,8 +432,8 @@ public:
 	{
 		// we allocate max possible size
 		// 16 frames 
-		size_t stride = 640*2;
-		const size_t fsz = stride*480;
+		uint32_t stride = 640*2;
+		const uint32_t fsz = stride * 480;
 		frame_buffer = (uint8_t*)malloc(fsz * 16 + 16384*2);
 		frame_buffer_end = frame_buffer + fsz * 16;
 
@@ -571,7 +553,7 @@ public:
 	    	last_frame_time = (double)getTickCount();
 	        frame_complete_ind = frame_work_ind;
 	        i = (frame_work_ind + 1) & 15;
-	        frame_work_ind = i;            
+	        frame_work_ind = (uint8_t)i;            
             frame_data_len = 0;
 	        //debug("frame completed %d\n", frame_complete_ind);
 	    }
