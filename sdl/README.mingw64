@@ -12,19 +12,16 @@ Prerequisites
 	For this simple project, bash is only necessary to get `mingw32-make clean` to work. Everything else should work from command prompt.
 
 3. libusb-1.0
-	Download the latest Windows binaries from http://libusb.info/ (Tested with libusb-1.0.19-rc1-win)
+	Download the latest Windows binaries from http://libusb.info/ (Tested with libusb-1.0.20)
 	Unpack next to PS3EYEDriver.
 	Rename the directory to libusb-1.0 (i.e., cut off the version number).
 	See below for directory layout.
 	
 4. SDL2
-	Download the latest Development Libraries from http://www.libsdl.org/download-2.0.php (Tested with SDL2-devel-2.0.3-mingw.tar.gz)
+	Download the latest Development Libraries from http://www.libsdl.org/download-2.0.php (Tested with SDL2-devel-2.0.4-mingw.tar.gz)
 	Unpack next to PS3EYEDriver.
 	Rename the directory to SDL2.
-	Move the include files so that #include <SDL2/xxx.h> works.
-		`mkdir ../../SDL2/include/SDL2`
-		`mv ../../SDL2/include/* ../../SDL2/include/SDL2/`
-		
+
 5. A windows libusb interface to your PS3Eye
 	Read here: https://github.com/libusb/libusb/wiki/Windows#How_to_use_libusb_on_Windows
 	I used Zadig to install drivers for my camera. This was a little trickier than expected.
@@ -45,7 +42,6 @@ Necessary directory structure
 	-x86_64-w64-mingw32
 		-bin
 		-include
-			-SDL2
 		-lib
 
 Build
