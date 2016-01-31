@@ -4,7 +4,7 @@
  * Joseph Howse <josephhowse@nummist.com>; 2014-12-26
  **/
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include "ps3eye.h"
 
 
@@ -141,7 +141,7 @@ print_renderer_info(SDL_Renderer *renderer)
 int
 main(int argc, char *argv[])
 {
-    ps3eye_context ctx(320, 240, 187);
+    ps3eye_context ctx(640, 480, 60);
     if (!ctx.hasDevices()) {
         printf("No PS3 Eye camera connected\n");
         return EXIT_FAILURE;
