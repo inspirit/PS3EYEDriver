@@ -144,8 +144,11 @@ public:
     
 
     bool isStreaming() const { return is_streaming; }
-	bool isNewFrame() const;
-	const uint8_t* getLastFramePointer();
+	
+	// Get a frame from the camera. Notes:
+	// - If there is no frame available, this function will block until one is
+	// - The returned frame is a malloc'd copy; you must free() it yourself when done with it
+	uint8_t* getFrame();
 
 	uint32_t getWidth() const { return frame_width; }
 	uint32_t getHeight() const { return frame_height; }
@@ -154,7 +157,6 @@ public:
 
 	//
 	static const std::vector<PS3EYERef>& getDevices( bool forceRefresh = false );
-	static bool updateDevices();
 
 private:
 	PS3EYECam(const PS3EYECam&);

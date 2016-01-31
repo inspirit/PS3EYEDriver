@@ -34,16 +34,27 @@
 #include <list>
 
 struct yuv422_buffer_t {
-    void update(const unsigned char *pixels, int stride, int width, int height)
+	yuv422_buffer_t() :
+		pixels	(NULL),
+		size	(0),
+		stride	(0),
+		width	(0),
+		height	(0)
+	{
+	}
+
+    void update(unsigned char *pixels, int stride, int width, int height)
     {
+		if (this->pixels != NULL)
+		{
+			free(this->pixels);
+			this->pixels = NULL;
+		}
+			
         size_t size = stride * height;
+        this->size = size;
 
-        if (this->size != size) {
-            this->pixels = (unsigned char *)realloc(this->pixels, size);
-            this->size = size;
-        }
-
-        memcpy(this->pixels, pixels, size);
+		this->pixels = pixels;
         this->stride = stride;
         this->width = width;
         this->height = height;
@@ -56,35 +67,6 @@ struct yuv422_buffer_t {
     int width;
     int height;
 };
-
-struct yuv422_buffers_t {
-    yuv422_buffers_t(int count)
-        : current(0)
-        , count(count)
-        , buffers((yuv422_buffer_t *)calloc(sizeof(yuv422_buffer_t), count))
-    {
-    }
-
-    ~yuv422_buffers_t()
-    {
-        for (int i=0; i<count; i++) {
-            free(buffers[i].pixels);
-        }
-        free(buffers);
-    }
-
-    yuv422_buffer_t *next()
-    {
-        // TODO: Proper buffer queueing and locking
-        current = (current + 1) % count;
-        return buffers + current;
-    }
-
-    int current;
-    int count;
-    yuv422_buffer_t *buffers;
-};
-
 
 struct ps3eye_context_t {
     ps3eye_context_t()
@@ -111,7 +93,6 @@ struct ps3eye_t {
         , width(width)
         , height(height)
         , fps(fps)
-        , buffers(2)
     {
         eye->init(width, height, (uint8_t)fps);
         eye->start();
@@ -129,7 +110,7 @@ struct ps3eye_t {
     int width;
     int height;
     int fps;
-    yuv422_buffers_t buffers;
+    yuv422_buffer_t frame_buffer;
 };
 
 void
@@ -193,20 +174,15 @@ ps3eye_grab_frame(ps3eye_t *eye, int *stride)
         return NULL;
     }
 
-    while (!eye->eye->isNewFrame()) {
-        ps3eye::PS3EYECam::updateDevices();
-    }
-
-    yuv422_buffer_t *buffer = eye->buffers.next();
-    buffer->update(eye->eye->getLastFramePointer(),
+    eye->frame_buffer.update(eye->eye->getFrame(),
             eye->eye->getRowBytes(), eye->eye->getWidth(),
             eye->eye->getHeight());
 
     if (stride) {
-        *stride = buffer->stride;
+		*stride = eye->frame_buffer.stride;
     }
 
-    return buffer->pixels;
+	return eye->frame_buffer.pixels;
 }
 
 void

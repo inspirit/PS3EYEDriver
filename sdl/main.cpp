@@ -7,71 +7,9 @@
 #include <SDL.h>
 #include "ps3eye.h"
 
-
-struct yuv422_buffer_t {
-    void update(const unsigned char *pixels, int stride, int width, int height)
-    {
-        size_t size = stride * height;
-
-        if (this->size != size) {
-            this->pixels = (unsigned char *)realloc(this->pixels, size);
-            this->size = size;
-        }
-
-        memcpy(this->pixels, pixels, size);
-        this->stride = stride;
-        this->width = width;
-        this->height = height;
-    }
-    
-    unsigned char *pixels;
-    size_t size;
-
-    int stride;
-    int width;
-    int height;
-};
-
-struct yuv422_buffers_t {
-    yuv422_buffers_t(int count)
-        : current(0)
-        , count(count)
-        , buffers((yuv422_buffer_t *)calloc(sizeof(yuv422_buffer_t), count))
-    {
-    }
-
-    ~yuv422_buffers_t()
-    {
-        for (int i=0; i<count; i++) {
-            free(buffers[i].pixels);
-        }
-        free(buffers);
-    }
-
-    yuv422_buffer_t *next()
-    {
-        // TODO: Proper buffer queueing and locking
-        current = (current + 1) % count;
-        return buffers + current;
-    }
-
-    yuv422_buffer_t *read()
-    {
-        // TODO: Proper buffer dequeueing and locking
-        int last = current - 1;
-        if (last < 0) last += count;
-        return buffers + last;
-    }
-
-    int current;
-    int count;
-    yuv422_buffer_t *buffers;
-};
-
 struct ps3eye_context {
-    ps3eye_context(int width, int height, int fps)
-        : buffers(3 /* number of buffers */)
-        , eye(0)
+    ps3eye_context(int width, int height, int fps) :
+          eye(0)
         , devices(ps3eye::PS3EYECam::getDevices())
         , running(true)
         , last_ticks(0)
@@ -79,17 +17,15 @@ struct ps3eye_context {
     {
         if (hasDevices()) {
             eye = devices[0];
-            eye->init(width, height, fps);
+            eye->init(width, height, (uint8_t)fps);
         }
     }
 
-    bool
-    hasDevices()
+    bool hasDevices()
     {
         return (devices.size() > 0);
     }
 
-    yuv422_buffers_t buffers;
     std::vector<ps3eye::PS3EYECam::PS3EYERef> devices;
     ps3eye::PS3EYECam::PS3EYERef eye;
 
@@ -97,38 +33,6 @@ struct ps3eye_context {
     Uint32 last_ticks;
     Uint32 last_frames;
 };
-
-int
-ps3eye_cam_thread(void *user_data)
-{
-    ps3eye_context *ctx = (ps3eye_context *)user_data;
-
-    ctx->eye->start();
-
-    printf("Camera mode: %dx%d@%d\n", ctx->eye->getWidth(),
-           ctx->eye->getHeight(), ctx->eye->getFrameRate());
-
-    while (ctx->running) {
-        ps3eye::PS3EYECam::updateDevices();
-
-        if (ctx->eye->isNewFrame()) {
-            ctx->buffers.next()->update(ctx->eye->getLastFramePointer(),
-                    ctx->eye->getRowBytes(), ctx->eye->getWidth(),
-                    ctx->eye->getHeight());
-            ctx->last_frames++;
-        }
-
-        Uint32 now_ticks = SDL_GetTicks();
-        if (now_ticks - ctx->last_ticks > 1000) {
-            printf("FPS: %.2f\n", 1000 * ctx->last_frames /
-                                  (float(now_ticks - ctx->last_ticks)));
-            ctx->last_ticks = now_ticks;
-            ctx->last_frames = 0;
-        }
-    }
-
-    return EXIT_SUCCESS;
-}
 
 void
 print_renderer_info(SDL_Renderer *renderer)
@@ -182,13 +86,12 @@ main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    SDL_Thread *thread = SDL_CreateThread(ps3eye_cam_thread, "ps3eye_cam",
-                                          (void *)&ctx);
+	ctx.eye->start();
+
+	printf("Camera mode: %dx%d@%d\n", ctx.eye->getWidth(), ctx.eye->getHeight(), ctx.eye->getFrameRate());
 
     SDL_Event e;
-    yuv422_buffer_t *last;
-    void *video_tex_pixels;
-    int pitch;
+    
     while (ctx.running) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) {
@@ -196,19 +99,21 @@ main(int argc, char *argv[])
             }
         }
 
-        // TODO: Proper thread signalling to wait for next available buffer
-        SDL_Delay(10);
-        last = ctx.buffers.read();
+		uint8_t* new_pixels = ctx.eye->getFrame();
 
+		void *video_tex_pixels;
+		int pitch;
         SDL_LockTexture(video_tex, NULL, &video_tex_pixels, &pitch);
-        memcpy(video_tex_pixels, last->pixels, last->size);
+		memcpy(video_tex_pixels, new_pixels, ctx.eye->getRowBytes() * ctx.eye->getHeight());
         SDL_UnlockTexture(video_tex);
+
+		free(new_pixels);
 
         SDL_RenderCopy(renderer, video_tex, NULL, NULL);
         SDL_RenderPresent(renderer);
     }
 
-    SDL_WaitThread(thread, NULL);
+	ctx.eye->stop();
 
     SDL_DestroyTexture(video_tex);
     SDL_DestroyRenderer(renderer);
