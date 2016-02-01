@@ -1,5 +1,5 @@
 /**
- * PS3EYEDriver C API Interface for use with PS Move API
+ * PS3EYEDriver C API Interface
  * Copyright (c) 2014 Thomas Perl <m@thp.io>
  * All rights reserved.
  * 
@@ -27,7 +27,7 @@
  **/
 
 
-#include "ps3eyedriver.h"
+#include "ps3eye_capi.h"
 
 #include "ps3eye.h"
 

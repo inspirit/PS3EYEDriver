@@ -101,6 +101,19 @@ main(int argc, char *argv[])
 
 		uint8_t* new_pixels = ctx.eye->getFrame();
 
+		{
+			Uint32 now_ticks = SDL_GetTicks();
+
+			ctx.last_frames++;
+
+			if (now_ticks - ctx.last_ticks > 1000)
+			{
+				printf("FPS: %.2f\n", 1000 * ctx.last_frames / (float(now_ticks - ctx.last_ticks)));
+				ctx.last_ticks = now_ticks;
+				ctx.last_frames = 0;
+			}
+		}
+
 		void *video_tex_pixels;
 		int pitch;
         SDL_LockTexture(video_tex, NULL, &video_tex_pixels, &pitch);
