@@ -6,21 +6,8 @@
 #include <cstring>
 #include <vector>
 
-// define shared_ptr in std 
+#include <memory>
 
-#if (defined( _MSC_VER ) && ( _MSC_VER >= 1600 )) || (__cplusplus >= 201103L)
-    #include <memory>
-#else
-    #include <tr1/memory>
-    namespace std {
-        using std::tr1::shared_ptr;
-        using std::tr1::weak_ptr;        
-        using std::tr1::static_pointer_cast;
-        using std::tr1::dynamic_pointer_cast;
-        using std::tr1::const_pointer_cast;
-        using std::tr1::enable_shared_from_this;
-    }
-#endif
 
 #include "libusb.h"
 
@@ -143,6 +130,8 @@ public:
 		greenblc = val;
 		sccb_reg_write(0x44, val);
 	}
+    bool getFlipH() const { return flip_h; }
+    bool getFlipV() const { return flip_v; }
 	void setFlip(bool horizontal = false, bool vertical = false) {
         flip_h = horizontal;
         flip_v = vertical;
@@ -155,8 +144,11 @@ public:
     
 
     bool isStreaming() const { return is_streaming; }
-	bool isNewFrame() const;
-	const uint8_t* getLastFramePointer();
+	
+	// Get a frame from the camera. Notes:
+	// - If there is no frame available, this function will block until one is
+	// - The returned frame is a malloc'd copy; you must free() it yourself when done with it
+	uint8_t* getFrame();
 
 	uint32_t getWidth() const { return frame_width; }
 	uint32_t getHeight() const { return frame_height; }
@@ -165,7 +157,6 @@ public:
 
 	//
 	static const std::vector<PS3EYERef>& getDevices( bool forceRefresh = false );
-	static bool updateDevices();
 
 private:
 	PS3EYECam(const PS3EYECam&);
