@@ -1,8 +1,55 @@
-
 #include "ps3eye.h"
+
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
 
 #if defined WIN32 || defined _WIN32 || defined WINCE
 	#include <windows.h>
+	#include <algorithm>
+
+	#ifdef __MINGW32__
+		void SetThreadName(const char* threadName)
+		{
+			// Not sure how to implement this on mingw
+		}
+	#else
+		const DWORD MS_VC_EXCEPTION=0x406D1388;
+
+		#pragma pack(push,8)
+		typedef struct tagTHREADNAME_INFO
+		{
+			DWORD dwType;		// Must be 0x1000.
+			LPCSTR szName;		// Pointer to name (in user addr space).
+			DWORD dwThreadID;	// Thread ID (-1=caller thread).
+			DWORD dwFlags;		// Reserved for future use, must be zero.
+		} THREADNAME_INFO;
+		#pragma pack(pop)
+
+		void SetThreadName(uint32_t thread_id, const char* thread_name)
+		{
+			THREADNAME_INFO info;
+			info.dwType = 0x1000;
+			info.szName = thread_name;
+			info.dwThreadID = thread_id;
+			info.dwFlags = 0;
+
+			__try
+			{
+				RaiseException(MS_VC_EXCEPTION, 0, sizeof(info) / sizeof(ULONG_PTR), (ULONG_PTR*)&info);
+			}
+			__except (EXCEPTION_EXECUTE_HANDLER)
+			{
+			}
+		}
+
+		void SetThreadName(const char* thread_name)
+		{
+			SetThreadName(GetCurrentThreadId(), thread_name);
+		}
+	#endif
+
 #else
 	#include <sys/time.h>
 	#include <time.h>
@@ -10,9 +57,17 @@
 		#include <mach/mach.h>
 		#include <mach/mach_time.h>
 	#endif
+
+	void SetThreadName(const char* threadName)
+	{
+		// Not sure how to implement this on linux/osx, so left empty...
+	}
 #endif
 
 namespace ps3eye {
+
+#define TRANSFER_SIZE		16384
+#define NUM_TRANSFERS		8
 
 #define OV534_REG_ADDRESS	0xf1	/* sensor address */
 #define OV534_REG_SUBADDR	0xf2
@@ -278,9 +333,9 @@ enum gspca_packet_type {
  */
 static uint8_t find_ep(struct libusb_device *device)
 {
-	const struct libusb_interface_descriptor *altsetting;
+	const struct libusb_interface_descriptor *altsetting = NULL;
     const struct libusb_endpoint_descriptor *ep;
-	struct libusb_config_descriptor *config;
+	struct libusb_config_descriptor *config = NULL;
     int i;
     uint8_t ep_addr = 0;
 
@@ -310,39 +365,6 @@ static uint8_t find_ep(struct libusb_device *device)
     return ep_addr;
 }
 
-// timestapms
-// WIN and MAC only
-static int64_t getTickCount()
-{
-#if defined WIN32 || defined _WIN32 || defined WINCE
-    LARGE_INTEGER counter;
-    QueryPerformanceCounter( &counter );
-    return (int64_t)counter.QuadPart;
-#else
-    return (int64_t)mach_absolute_time();
-#endif
-}
-
-static double getTickFrequency()
-{
-#if defined WIN32 || defined _WIN32 || defined WINCE
-    LARGE_INTEGER freq;
-    QueryPerformanceFrequency(&freq);
-    return (double)freq.QuadPart;
-#else
-    static double freq = 0;
-    if( freq == 0 )
-    {
-        mach_timebase_info_data_t sTimebaseInfo;
-        mach_timebase_info(&sTimebaseInfo);
-        freq = sTimebaseInfo.denom*1e9/sTimebaseInfo.numer;
-    }
-    return freq;
-#endif
-}
-//
-
-
 const uint16_t PS3EYECam::VENDOR_ID = 0x1415;
 const uint16_t PS3EYECam::PRODUCT_ID = 0x2000;
 
@@ -350,27 +372,36 @@ class USBMgr
 {
  public:
     USBMgr();
-    ~USBMgr();
+	 ~USBMgr();
 
-    static std::shared_ptr<USBMgr>  instance();
-    static libusb_context* usbContext() { return instance()->usb_context; }
-    static int listDevices(std::vector<PS3EYECam::PS3EYERef>& list);
-    static bool handleEvents();
+	static std::shared_ptr<USBMgr>  instance();
+    int listDevices(std::vector<PS3EYECam::PS3EYERef>& list);
+	void cameraStarted();
+	void cameraStopped();
 
     static std::shared_ptr<USBMgr>  sInstance;
     static int                      sTotalDevices;
 
  private:   
-    libusb_context* usb_context;
+    libusb_context*					usb_context;
+	std::thread						update_thread;
+	std::atomic_bool				exit_signaled;
+	std::atomic_int					active_camera_count;
 
     USBMgr(const USBMgr&);
     void operator=(const USBMgr&);
+
+	void startTransferThread();
+	void stopTransferThread();
+	void transferThreadFunc();
 };
 
 std::shared_ptr<USBMgr> USBMgr::sInstance;
 int                     USBMgr::sTotalDevices = 0;
 
-USBMgr::USBMgr()
+USBMgr::USBMgr() :
+	exit_signaled({ false }),
+	active_camera_count({ 0 })
 {
     libusb_init(&usb_context);
     libusb_set_debug(usb_context, 1);
@@ -390,178 +421,303 @@ std::shared_ptr<USBMgr> USBMgr::instance()
     return sInstance;
 }
 
-bool USBMgr::handleEvents()
+void USBMgr::cameraStarted()
 {
-    struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 50 * 1000; // ms
+	if (active_camera_count++ == 0)
+		startTransferThread();
+}
 
-    return (libusb_handle_events_timeout_completed(instance()->usb_context, &tv, NULL) == 0);
+void USBMgr::cameraStopped()
+{
+	if (--active_camera_count == 0)
+		stopTransferThread();
+}
+
+void USBMgr::startTransferThread()
+{
+	update_thread = std::thread(&USBMgr::transferThreadFunc, this);
+}
+
+void USBMgr::stopTransferThread()
+{
+	exit_signaled = true;
+	update_thread.join();
+}
+
+void USBMgr::transferThreadFunc()
+{
+	SetThreadName("PS3EyeDriver Transfer Thread");
+
+	struct timeval tv;
+	tv.tv_sec = 0;
+	tv.tv_usec = 50 * 1000; // ms
+
+	while (!exit_signaled)
+	{
+		libusb_handle_events_timeout_completed(usb_context, &tv, NULL);
+	}
 }
 
 int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
 {
-    libusb_device *dev;
-    libusb_device **devs;
+	libusb_device *dev;
+	libusb_device **devs;
+	libusb_device_handle *devhandle;
     int i = 0;
     int cnt;
 
-    cnt = libusb_get_device_list(instance()->usb_context, &devs);
+    cnt = (int)libusb_get_device_list(usb_context, &devs);
 
-    if (cnt < 0)
-        debug("Error Device scan\n");
+	if (cnt < 0) {
+		debug("Error Device scan\n");
+	}
 
     cnt = 0;
     while ((dev = devs[i++]) != NULL) 
-    {
-    	struct libusb_device_descriptor desc;
+	{
+		struct libusb_device_descriptor desc;
 		libusb_get_device_descriptor(dev, &desc);
-		if(desc.idVendor == PS3EYECam::VENDOR_ID && desc.idProduct == PS3EYECam::PRODUCT_ID)
+		if (desc.idVendor == PS3EYECam::VENDOR_ID && desc.idProduct == PS3EYECam::PRODUCT_ID)
 		{
-                list.push_back( PS3EYECam::PS3EYERef( new PS3EYECam(dev) ) );
-                libusb_ref_device(dev);
-                cnt++;
-            }
+			int err = libusb_open(dev, &devhandle);
+			if (err == 0)
+			{
+				libusb_close(devhandle);
+				list.push_back( PS3EYECam::PS3EYERef( new PS3EYECam(dev) ) );
+				libusb_ref_device(dev);
+				cnt++;
+			}
 		}
+	}
 
-    libusb_free_device_list(devs, 1);
+	libusb_free_device_list(devs, 1);
 
     return cnt;
 }
 
-// URBDesc
+static void LIBUSB_CALL transfer_completed_callback(struct libusb_transfer *xfr);
 
-static void LIBUSB_CALL cb_xfr(struct libusb_transfer *xfr);
+class FrameQueue
+{
+public:
+	FrameQueue(uint32_t frame_size) :
+		frame_size			(frame_size),
+		num_frames			(2),
+		frame_buffer		((uint8_t*)malloc(frame_size * num_frames)),
+		head				(0),
+		tail				(0),
+		available			(0)
+	{
+	}
+
+	~FrameQueue()
+	{
+		free(frame_buffer);
+	}
+
+	uint8_t* GetFrameBufferStart()
+	{
+		return frame_buffer;
+	}
+
+	uint8_t* Enqueue()
+	{
+		uint8_t* new_frame = NULL;
+
+		std::lock_guard<std::mutex> lock(mutex);
+
+		// Unlike traditional producer/consumer, we don't block the producer if the buffer is full (ie. the consumer is not reading data fast enough).
+		// Instead, if the buffer is full, we simply return the current frame pointer, causing the producer to overwrite the previous frame.
+		// This allows performance to degrade gracefully: if the consumer is not fast enough (< Camera FPS), it will miss frames, but if it is fast enough (>= Camera FPS), it will see everything.
+		//
+		// Note that because the the producer is writing directly to the ring buffer, we can only ever be a maximum of num_frames-1 ahead of the consumer, 
+		// otherwise the producer could overwrite the frame the consumer is currently reading (in case of a slow consumer)
+		if (available >= num_frames - 1)
+		{
+			return frame_buffer + head * frame_size;
+		}
+
+		// Note: we don't need to copy any data to the buffer since the USB packets are directly written to the frame buffer.
+		// We just need to update head and available count to signal to the consumer that a new frame is available
+		head = (head + 1) % num_frames;
+		available++;
+
+		// Determine the next frame pointer that the producer should write to
+		new_frame = frame_buffer + head * frame_size;
+
+		// Signal consumer that data became available
+		empty_condition.notify_one();
+
+		return new_frame;
+	}
+
+	uint8_t* Dequeue()
+	{
+		uint8_t* new_frame = (uint8_t*)malloc(frame_size);
+		
+		std::unique_lock<std::mutex> lock(mutex);
+
+		// If there is no data in the buffer, wait until data becomes available
+		empty_condition.wait(lock, [this] () { return available != 0; });
+
+		// Copy from internal buffer
+		uint8_t* source = frame_buffer + frame_size * tail;
+		memcpy(new_frame, source, frame_size);
+
+		// Update tail and available count
+		tail = (tail + 1) % num_frames;
+		available--;
+
+		return new_frame;
+	}
+
+private:
+	uint32_t				frame_size;
+	uint32_t				num_frames;
+
+	uint8_t*				frame_buffer;
+	uint32_t				head;
+	uint32_t				tail;
+	uint32_t				available;
+
+	std::mutex				mutex;
+	std::condition_variable	empty_condition;
+};
+
+// URBDesc
 
 class URBDesc
 {
 public:
-	URBDesc() : num_transfers(0), last_packet_type(DISCARD_PACKET), last_pts(0), last_fid(0)
+	URBDesc() : 
+		num_active_transfers			(0),
+		last_packet_type		(DISCARD_PACKET), 
+		last_pts				(0), 
+		last_fid				(0), 
+		transfer_buffer			(NULL),
+		cur_frame_start			(NULL),
+		cur_frame_data_len		(0),
+		frame_size				(0),
+		frame_queue				(NULL)
 	{
-		// we allocate max possible size
-		// 16 frames 
-		size_t stride = 640*2;
-		const size_t fsz = stride*480;
-		frame_buffer = (uint8_t*)malloc(fsz * 16 + 16384*2);
-		frame_buffer_end = frame_buffer + fsz * 16;
-
-        frame_data_start = frame_buffer;
-        frame_data_len = 0;
-		frame_complete_ind = 0;
-		frame_work_ind = 0;
-        frame_size = fsz;
 	}
+
 	~URBDesc()
 	{
 		debug("URBDesc destructor\n");
-		if(num_transfers)
-		{
-			close_transfers();
-		}
-        if(frame_buffer != NULL)
-            free(frame_buffer);
-        frame_buffer = NULL;
+		close_transfers();
 	}
 
 	bool start_transfers(libusb_device_handle *handle, uint32_t curr_frame_size)
 	{
-		struct libusb_transfer *xfr0,*xfr1;
-		uint8_t* buff, *buff1;
-		uint8_t ep_addr;
-	    int bsize = 16384;
-        
+		// Initialize the frame queue
         frame_size = curr_frame_size;
+		frame_queue = new FrameQueue(frame_size);
 
-	    // bulk transfers
-	    xfr0 = libusb_alloc_transfer(0);
-	    xfr1 = libusb_alloc_transfer(0);
+		// Initialize the current frame pointer to the start of the buffer; it will be updated as frames are completed and pushed onto the frame queue
+		cur_frame_start = frame_queue->GetFrameBufferStart();
+		cur_frame_data_len = 0;
 
-	    buff = frame_buffer_end;
-	    buff1 = buff + bsize;
-        memset(frame_buffer_end, 0, bsize*2);
+		// Find the bulk transfer endpoint
+		uint8_t bulk_endpoint = find_ep(libusb_get_device(handle));
+		libusb_clear_halt(handle, bulk_endpoint);
 
-	    xfr[0] = xfr0;
-	    xfr[1] = xfr1;
+		// Allocate the transfer buffer
+		transfer_buffer = (uint8_t*)malloc(TRANSFER_SIZE * NUM_TRANSFERS);
+		memset(transfer_buffer, 0, TRANSFER_SIZE * NUM_TRANSFERS);
 
-	    ep_addr = find_ep(libusb_get_device(handle));
-	    //debug("found ep: %d\n", ep_addr);
+		int res = 0;
+		for (int index = 0; index < NUM_TRANSFERS; ++index)
+		{
+			// Create & submit the transfer
+			xfr[index] = libusb_alloc_transfer(0);
+			libusb_fill_bulk_transfer(xfr[index], handle, bulk_endpoint, transfer_buffer + index * TRANSFER_SIZE, TRANSFER_SIZE, transfer_completed_callback, reinterpret_cast<void*>(this), 0);
 
-	    libusb_clear_halt(handle, ep_addr);
+			res |= libusb_submit_transfer(xfr[index]);
+			
+			num_active_transfers++;
+		}
 
-	    libusb_fill_bulk_transfer(xfr0, handle, ep_addr, buff, bsize, cb_xfr, reinterpret_cast<void*>(this), 0);
-	    libusb_fill_bulk_transfer(xfr1, handle, ep_addr, buff1, bsize, cb_xfr, reinterpret_cast<void*>(this), 0);
-
-	    int res = libusb_submit_transfer(xfr0);
-	    res |= libusb_submit_transfer(xfr1);
-
-	    num_transfers = 2;
-	    frame_complete_ind = 0;
-		frame_work_ind = 0;
 		last_pts = 0;
 		last_fid = 0;
-		last_frame_time = 0;
+
+		USBMgr::instance()->cameraStarted();
 
 		return res == 0;
 	}
 
 	void close_transfers()
 	{
-		libusb_cancel_transfer(xfr[0]);
-	    libusb_cancel_transfer(xfr[1]);
-	    while(num_transfers)
-	    {
-	    	if( !USBMgr::instance()->handleEvents() )
-	    	{
-	    		break;
-	    	}
-	    }
+		std::unique_lock<std::mutex> lock(num_active_transfers_mutex);
+		if (num_active_transfers == 0)
+			return;
+
+		// Cancel any pending transfers
+		for (int index = 0; index < NUM_TRANSFERS; ++index)
+		{
+			libusb_cancel_transfer(xfr[index]);
+		}
+
+		// Wait for cancelation to finish
+		num_active_transfers_condition.wait(lock, [this]() { return num_active_transfers == 0; });
+
+		USBMgr::instance()->cameraStopped();
+
+		free(transfer_buffer);
+		transfer_buffer = NULL;
+
+		delete frame_queue;
+		frame_queue = NULL;
+	}
+
+	void transfer_canceled()
+	{
+		std::lock_guard<std::mutex> lock(num_active_transfers_mutex);
+		--num_active_transfers;
+		num_active_transfers_condition.notify_one();
 	}
 
 	void frame_add(enum gspca_packet_type packet_type, const uint8_t *data, int len)
 	{
-	    int i;
 	    if (packet_type == FIRST_PACKET) 
 	    {
-	        frame_data_start = frame_buffer + frame_work_ind*frame_size;
-            frame_data_len = 0;
+            cur_frame_data_len = 0;
 	    } 
 	    else
 	    {
-            switch(last_packet_type)
+            switch(last_packet_type)  // ignore warning.
             {
                 case DISCARD_PACKET:
                     if (packet_type == LAST_PACKET) {
                         last_packet_type = packet_type;
-                        frame_data_len = 0;
+                        cur_frame_data_len = 0;
                     }
                     return;
                 case LAST_PACKET:
                     return;
+                default:
+                    break;
             }
 	    }
 
 	    /* append the packet to the frame buffer */
 	    if (len > 0)
         {
-            if(frame_data_len + len > frame_size)
+            if(cur_frame_data_len + len > frame_size)
             {
                 packet_type = DISCARD_PACKET;
-                frame_data_len = 0;
+                cur_frame_data_len = 0;
             } else {
-                memcpy(frame_data_start+frame_data_len, data, len);
-                frame_data_len += len;
+                memcpy(cur_frame_start+cur_frame_data_len, data, len);
+                cur_frame_data_len += len;
             }
 	    }
 
 	    last_packet_type = packet_type;
 
-	    if (packet_type == LAST_PACKET) 
-	    {        
-	    	last_frame_time = getTickCount();
-	        frame_complete_ind = frame_work_ind;
-	        i = (frame_work_ind + 1) & 15;
-	        frame_work_ind = i;            
-            frame_data_len = 0;
+	    if (packet_type == LAST_PACKET) {        
+			cur_frame_data_len = 0;
+			cur_frame_start = frame_queue->Enqueue();
 	        //debug("frame completed %d\n", frame_complete_ind);
 	    }
 	}
@@ -575,7 +731,7 @@ public:
 
 	    payload_len = 2048; // bulk type
 	    do {
-	        len = std::min(remaining_len, payload_len);
+			len = (std::min)(remaining_len, payload_len);
 
 	        /* Payloads are prefixed with a UVC-style header.  We
 	           consider a frame to start when the FID toggles, or the PTS
@@ -616,7 +772,7 @@ public:
 	        else if (data[1] & UVC_STREAM_EOF) 
 	        {
 	            last_pts = 0;
-                if(frame_data_len + len - 12 != frame_size)
+                if(cur_frame_data_len + len - 12 != frame_size)
                 {
                     goto discard;
                 }
@@ -639,24 +795,23 @@ public:
 	    } while (remaining_len > 0);
 	}
 
-	uint8_t num_transfers;
-	enum gspca_packet_type last_packet_type;
-	uint32_t last_pts;
-	uint16_t last_fid;
-	libusb_transfer *xfr[2];
+	uint8_t					num_active_transfers;
+	std::mutex				num_active_transfers_mutex;
+	std::condition_variable	num_active_transfers_condition;
 
-	uint8_t *frame_buffer;
-    uint8_t *frame_buffer_end;
-    uint8_t *frame_data_start;
-	uint32_t frame_data_len;
-	uint32_t frame_size;
-	uint8_t frame_complete_ind;
-	uint8_t frame_work_ind;
+	enum gspca_packet_type	last_packet_type;
+	uint32_t				last_pts;
+	uint16_t				last_fid;
+	libusb_transfer*		xfr[NUM_TRANSFERS];
 
-	double last_frame_time;
+	uint8_t*				transfer_buffer;
+    uint8_t*				cur_frame_start;
+	uint32_t				cur_frame_data_len;
+	uint32_t				frame_size;
+	FrameQueue*				frame_queue;
 };
 
-static void LIBUSB_CALL cb_xfr(struct libusb_transfer *xfr)
+static void LIBUSB_CALL transfer_completed_callback(struct libusb_transfer *xfr)
 {
     URBDesc *urb = reinterpret_cast<URBDesc*>(xfr->user_data);
     enum libusb_transfer_status status = xfr->status;
@@ -666,7 +821,7 @@ static void LIBUSB_CALL cb_xfr(struct libusb_transfer *xfr)
         debug("transfer status %d\n", status);
 
         libusb_free_transfer(xfr);
-        urb->num_transfers--;
+		urb->transfer_canceled();
         
         if(status != LIBUSB_TRANSFER_CANCELLED)
         {
@@ -703,11 +858,6 @@ const std::vector<PS3EYECam::PS3EYERef>& PS3EYECam::getDevices( bool forceRefres
     return devices;
 }
 
-bool PS3EYECam::updateDevices()
-{
-	return USBMgr::instance()->handleEvents();
-}
-
 PS3EYECam::PS3EYECam(libusb_device *device)
 {
 	// default controls
@@ -721,11 +871,14 @@ PS3EYECam::PS3EYECam(libusb_device *device)
 	contrast =  37;
 	blueblc = 128;
 	redblc = 128;
+	greenblc = 128;
     flip_h = false;
     flip_v = false;
 
 	usb_buf = NULL;
 	handle_ = NULL;
+
+	is_streaming = false;
 
 	device_ = device;
 	mgrPtr = USBMgr::instance();
@@ -767,12 +920,11 @@ bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate)
 	{
 		frame_width = 640;
 		frame_height = 480;
-		frame_rate = std::max(desiredFrameRate, static_cast<uint8_t>(15));
 	} else {
 		frame_width = 320;
 		frame_height = 240;
-		frame_rate = std::max(desiredFrameRate, static_cast<uint8_t>(30));
 	}
+	frame_rate = ov534_set_frame_rate(desiredFrameRate, true);
     frame_stride = frame_width * 2;
 	//
 
@@ -783,7 +935,7 @@ bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate)
 #ifdef _MSC_VER
 	Sleep(100);
 #else
-    nanosleep((struct timespec[]){{0, 100000000}}, NULL);
+    nanosleep((const struct timespec[]){{0, 100000000}}, NULL);
 #endif
 
 	/* initialize the sensor address */
@@ -794,7 +946,7 @@ bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate)
 #ifdef _MSC_VER
 	Sleep(10);
 #else    
-    nanosleep((struct timespec[]){{0, 10000000}}, NULL);
+    nanosleep((const struct timespec[]){{0, 10000000}}, NULL);
 #endif
 
 	/* probe the sensor */
@@ -838,6 +990,7 @@ void PS3EYECam::start()
 	setSharpness(sharpness);
 	setRedBalance(redblc);
 	setBlueBalance(blueblc);
+	setGreenBalance(greenblc);
     setFlip(flip_h, flip_v);
 
 	ov534_set_led(1);
@@ -845,38 +998,26 @@ void PS3EYECam::start()
 
 	// init and start urb
 	urb->start_transfers(handle_, frame_stride*frame_height);
-	last_qued_frame_time = 0;
     is_streaming = true;
 }
 
 void PS3EYECam::stop()
 {
     if(!is_streaming) return;
-    
-	// close urb
-	urb->close_transfers();
 
 	/* stop streaming data */
 	ov534_reg_write(0xe0, 0x09);
 	ov534_set_led(0);
     
+	// close urb
+	urb->close_transfers();
+
     is_streaming = false;
 }
 
-bool PS3EYECam::isNewFrame() const
+uint8_t* PS3EYECam::getFrame()
 {
-	if(last_qued_frame_time < urb->last_frame_time)
-	{
-		return true;
-	}
-	return false;
-}
-
-const uint8_t* PS3EYECam::getLastFramePointer()
-{
-	last_qued_frame_time = urb->last_frame_time;
-	const uint8_t* frame = const_cast<uint8_t*>(urb->frame_buffer + urb->frame_complete_ind * urb->frame_size);
-	return frame;
+	return urb->frame_queue->Dequeue();
 }
 
 bool PS3EYECam::open_usb()
@@ -937,8 +1078,8 @@ void PS3EYECam::ov534_set_led(int status)
 	}
 }
 
-/* set framerate */
-void PS3EYECam::ov534_set_frame_rate(uint8_t frame_rate)
+/* validate frame rate and (if not dry run) set it */
+uint8_t PS3EYECam::ov534_set_frame_rate(uint8_t frame_rate, bool dry_run)
 {
      int i;
      struct rate_s {
@@ -956,12 +1097,16 @@ void PS3EYECam::ov534_set_frame_rate(uint8_t frame_rate)
              {15, 0x03, 0x41, 0x04},
      };
      static const struct rate_s rate_1[] = { /* 320x240 */
+             {205, 0x01, 0xc1, 0x02}, /* 205 FPS: video is partly corrupt */
+             {187, 0x01, 0x81, 0x02}, /* 187 FPS or below: video is valid */
+             {150, 0x01, 0xc1, 0x04},
+             {137, 0x02, 0xc1, 0x02},
              {125, 0x02, 0x81, 0x02},
              {100, 0x02, 0xc1, 0x04},
              {75, 0x03, 0xc1, 0x04},
              {60, 0x04, 0xc1, 0x04},
              {50, 0x02, 0x41, 0x04},
-             {40, 0x03, 0x41, 0x04},
+             {37, 0x03, 0x41, 0x04},
              {30, 0x04, 0x41, 0x04},
      };
 
@@ -978,12 +1123,14 @@ void PS3EYECam::ov534_set_frame_rate(uint8_t frame_rate)
              r++;
      }
  
-     
-         sccb_reg_write(0x11, r->r11);
-         sccb_reg_write(0x0d, r->r0d);
-         ov534_reg_write(0xe5, r->re5);
+     if (!dry_run) {
+     sccb_reg_write(0x11, r->r11);
+     sccb_reg_write(0x0d, r->r0d);
+     ov534_reg_write(0xe5, r->re5);
+    }
 
      debug("frame_rate: %d\n", r->fps);
+     return r->fps;
 }
 
 void PS3EYECam::ov534_reg_write(uint16_t reg, uint8_t val)
@@ -1050,21 +1197,24 @@ void PS3EYECam::sccb_reg_write(uint8_t reg, uint8_t val)
 	ov534_reg_write(OV534_REG_WRITE, val);
 	ov534_reg_write(OV534_REG_OPERATION, OV534_OP_WRITE_3);
 
-	if (!sccb_check_status())
+	if (!sccb_check_status()) {
 		debug("sccb_reg_write failed\n");
+}
 }
 
 
 uint8_t PS3EYECam::sccb_reg_read(uint16_t reg)
 {
-	ov534_reg_write(OV534_REG_SUBADDR, reg);
+	ov534_reg_write(OV534_REG_SUBADDR, (uint8_t)reg);
 	ov534_reg_write(OV534_REG_OPERATION, OV534_OP_WRITE_2);
-	if (!sccb_check_status())
+	if (!sccb_check_status()) {
 		debug("sccb_reg_read failed 1\n");
+	}
 
 	ov534_reg_write(OV534_REG_OPERATION, OV534_OP_READ_2);
-	if (!sccb_check_status())
+	if (!sccb_check_status()) {
 		debug( "sccb_reg_read failed 2\n");
+	}
 
 	return ov534_reg_read(OV534_REG_READ);
 }
