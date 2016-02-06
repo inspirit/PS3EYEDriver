@@ -442,6 +442,9 @@ void USBMgr::stopTransferThread()
 {
 	exit_signaled = true;
 	update_thread.join();
+	// Reset the exit signal flag.
+	// If we don't and we call startTransferThread() again, transferThreadFunc will exit immediately.
+	exit_signaled = false;    
 }
 
 void USBMgr::transferThreadFunc()
