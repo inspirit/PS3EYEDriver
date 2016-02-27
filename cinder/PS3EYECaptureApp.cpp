@@ -2,7 +2,6 @@
 #include "cinder/gl/gl.h"
 #include "cinder/gl/Texture.h"
 #include "cinder/Utilities.h"
-#include "cinder/Thread.h"
 
 #include "ciUI.h"
 
@@ -85,16 +84,11 @@ class PS3EYECaptureApp : public AppBasic {
 	void draw();
 	void shutdown();
 
-	void eyeUpdateThreadFn();
-
 	ciUICanvas *gui;
     eyeFPS *eyeFpsLab;
     void guiEvent(ciUIEvent *event);
 
     ps3eye::PS3EYECam::PS3EYERef eye;
-
-	bool					mShouldQuit;
-	std::thread				mThread;
 
 	gl::Texture mTexture;
 	uint8_t *frame_bgra;
@@ -111,8 +105,6 @@ class PS3EYECaptureApp : public AppBasic {
 void PS3EYECaptureApp::setup()
 {
     using namespace ps3eye;
-
-	mShouldQuit = false;
 
     // list out the devices
     std::vector<PS3EYECam::PS3EYERef> devices( PS3EYECam::getDevices() );
@@ -140,10 +132,7 @@ void PS3EYECaptureApp::setup()
 		frame_bgra = new uint8_t[eye->getWidth()*eye->getHeight()*4];
 		mFrame = Surface(frame_bgra, eye->getWidth(), eye->getHeight(), eye->getWidth()*4, SurfaceChannelOrder::BGRA);
 		memset(frame_bgra, 0, eye->getWidth()*eye->getHeight()*4);
-		
-		// create and launch the thread
-		mThread = thread( bind( &PS3EYECaptureApp::eyeUpdateThreadFn, this ) );
-        
+		        
         gui->addWidgetDown(new ciUILabel("EYE", CI_UI_FONT_MEDIUM));
         
         eyeFpsLab = new eyeFPS(CI_UI_FONT_MEDIUM);
@@ -220,22 +209,12 @@ void PS3EYECaptureApp::guiEvent(ciUIEvent *event)
     }
 }
 
-void PS3EYECaptureApp::eyeUpdateThreadFn()
-{
-	while( !mShouldQuit )
-	{
-		bool res = ps3eye::PS3EYECam::updateDevices();
-        if(!res) break;
-	}
-}
-
 void PS3EYECaptureApp::shutdown()
 {
-	mShouldQuit = true;
-	mThread.join();
     // You should stop before exiting
     // otherwise the app will keep working
-    eye->stop();
+	if (eye)
+		eye->stop();
     //
 	delete[] frame_bgra;
 	delete gui;
@@ -250,13 +229,12 @@ void PS3EYECaptureApp::update()
 {
     if(eye)
     {
-        bool isNewFrame = eye->isNewFrame();
-        if(isNewFrame)
-        {
-            yuv422_to_rgba(eye->getLastFramePointer(), eye->getRowBytes(), frame_bgra, mFrame.getWidth(), mFrame.getHeight());
-            mTexture = gl::Texture( mFrame );
-        }
-        mCamFrameCount += isNewFrame ? 1 : 0;
+		uint8_t* new_pixels = eye->getFrame();
+        yuv422_to_rgba(new_pixels, eye->getRowBytes(), frame_bgra, mFrame.getWidth(), mFrame.getHeight());
+        mTexture = gl::Texture( mFrame );
+		free(new_pixels);
+
+        mCamFrameCount++;
         double now = mTimer.getSeconds();
         if( now > mCamFpsLastSampleTime + 1 ) {
             uint32_t framesPassed = mCamFrameCount - mCamFpsLastSampleFrame;

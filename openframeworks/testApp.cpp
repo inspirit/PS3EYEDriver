@@ -68,12 +68,9 @@ void testApp::setup(){
         
         videoFrame 	= new unsigned char[eye->getWidth()*eye->getHeight()*4];
         videoTexture.allocate(eye->getWidth(), eye->getHeight(), GL_RGBA);
-        
-        threadUpdate.start();
     }
 }
 void testApp::exit(){
-    threadUpdate.stop();
     // You should stop before exiting
     // otherwise the app will keep working
     if(eye) eye->stop();
@@ -85,14 +82,12 @@ void testApp::update()
 {
     if(eye)
     {
-        bool isNewFrame = eye->isNewFrame();
-        if(isNewFrame)
-        {
-            yuv422_to_rgba(eye->getLastFramePointer(), eye->getRowBytes(), videoFrame, eye->getWidth(),eye->getHeight());
-            videoTexture.loadData(videoFrame, eye->getWidth(),eye->getHeight(), GL_RGBA);
-        }
-        
-        camFrameCount += isNewFrame ? 1: 0;
+		uint8_t* new_pixels = eye->getFrame();
+        yuv422_to_rgba(new_pixels, eye->getRowBytes(), videoFrame, eye->getWidth(),eye->getHeight());
+        videoTexture.loadData(videoFrame, eye->getWidth(),eye->getHeight(), GL_RGBA);
+		free(new_pixels);
+
+        camFrameCount++;
         float timeNow = ofGetElapsedTimeMillis();
         if( timeNow > camFpsLastSampleTime + 1000 ) {
             uint32_t framesPassed = camFrameCount - camFpsLastSampleFrame;
