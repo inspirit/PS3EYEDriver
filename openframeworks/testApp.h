@@ -3,34 +3,6 @@
 #include "ofMain.h"
 #include "ps3eye.h"
 
-class ps3eyeUpdate : public ofThread{
-    
-public:
-    ps3eyeUpdate(){
-    }
-    
-    void start(){
-        startThread(false, false);   // blocking, verbose
-    }
-    
-    void stop(){
-        stopThread();
-    }
-    
-    //--------------------------
-    void threadedFunction()
-    {
-        while( isThreadRunning() != 0 )
-        {
-            bool res = ps3eye::PS3EYECam::updateDevices();
-            if(!res)
-            {
-                break;
-            }
-        }
-    }
-};
-
 class testApp : public ofBaseApp{
 
 	public:
@@ -55,9 +27,7 @@ class testApp : public ofBaseApp{
         int camFpsLastSampleFrame;
         float camFpsLastSampleTime;
         float camFps;
-    
-        ps3eyeUpdate threadUpdate;
-    
+        
         unsigned char * videoFrame;
         ofTexture videoTexture;
 		
