@@ -766,7 +766,8 @@ public:
 	        if (this_pts != last_pts || this_fid != last_fid) {
 	            if (last_packet_type == INTER_PACKET)
 	            {
-	                frame_add(LAST_PACKET, NULL, 0);
+	                /* The last frame was incomplete, so don't keep it or we will glitch */
+	                frame_add(DISCARD_PACKET, NULL, 0);
 	            }
 	            last_pts = this_pts;
 	            last_fid = this_fid;
