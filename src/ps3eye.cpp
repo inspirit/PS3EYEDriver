@@ -379,14 +379,31 @@ class USBMgr
 	void cameraStarted();
 	void cameraStopped();
 
+    int usbControlTransfer(
+        libusb_device_handle *dev_handle,
+        uint8_t bmRequestType, uint8_t bRequest, uint16_t wValue, uint16_t wIndex,
+        unsigned char *data, uint16_t wLength, unsigned int timeout);
+
     static std::shared_ptr<USBMgr>  sInstance;
     static int                      sTotalDevices;
 
  private:   
     libusb_context*					usb_context;
 	std::thread						update_thread;
+    bool            				thread_started;
 	std::atomic_bool				exit_signaled;
 	std::atomic_int					active_camera_count;
+
+    enum ControlTransferStatus {
+        CONTROL_TRANSFER_EMPTY,
+        CONTROL_TRANSFER_PENDING_SUBMIT,
+        CONTROL_TRANSFER_PENDING_RESPONSE,
+        CONTROL_TRANSFER_COMPLETE
+    };
+    struct libusb_transfer*         control_transfer;
+    std::mutex                      control_transfer_mutex;
+    std::condition_variable         transfer_complete_condition;
+    std::atomic_int                 control_transfer_status; // ControlTransferStatus
 
     USBMgr(const USBMgr&);
     void operator=(const USBMgr&);
@@ -394,14 +411,20 @@ class USBMgr
 	void startTransferThread();
 	void stopTransferThread();
 	void transferThreadFunc();
+
+    void usbControlTransferThreadUpdate();
+    static void LIBUSB_CALL sync_transfer_cb(struct libusb_transfer *transfer);
 };
 
 std::shared_ptr<USBMgr> USBMgr::sInstance;
 int                     USBMgr::sTotalDevices = 0;
 
 USBMgr::USBMgr() :
+    thread_started(false),
 	exit_signaled({ false }),
-	active_camera_count({ 0 })
+	active_camera_count({ 0 }),
+    control_transfer(nullptr),
+    control_transfer_status({ CONTROL_TRANSFER_EMPTY })
 {
     libusb_init(&usb_context);
     libusb_set_debug(usb_context, 1);
@@ -436,12 +459,15 @@ void USBMgr::cameraStopped()
 void USBMgr::startTransferThread()
 {
 	update_thread = std::thread(&USBMgr::transferThreadFunc, this);
+    thread_started = true;
 }
 
 void USBMgr::stopTransferThread()
 {
 	exit_signaled = true;
 	update_thread.join();
+
+    thread_started = false;
 	// Reset the exit signal flag.
 	// If we don't and we call startTransferThread() again, transferThreadFunc will exit immediately.
 	exit_signaled = false;    
@@ -457,6 +483,8 @@ void USBMgr::transferThreadFunc()
 
 	while (!exit_signaled)
 	{
+        usbControlTransferThreadUpdate();
+
 		libusb_handle_events_timeout_completed(usb_context, &tv, NULL);
 	}
 }
@@ -496,6 +524,139 @@ int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
 	libusb_free_device_list(devs, 1);
 
     return cnt;
+}
+
+int USBMgr::usbControlTransfer(
+    libusb_device_handle *dev_handle,
+    uint8_t bmRequestType, uint8_t bRequest, uint16_t wValue, uint16_t wIndex,
+    unsigned char *data, uint16_t wLength, unsigned int timeout)
+{
+    int r;
+
+    if (thread_started)
+    {
+        struct libusb_transfer *transfer;
+        unsigned char *buffer;
+
+        transfer = libusb_alloc_transfer(0);
+        if (!transfer)
+            return LIBUSB_ERROR_NO_MEM;
+
+        buffer = (unsigned char*)malloc(LIBUSB_CONTROL_SETUP_SIZE + wLength);
+        if (!buffer) {
+            libusb_free_transfer(transfer);
+            return LIBUSB_ERROR_NO_MEM;
+        }
+
+        libusb_fill_control_setup(buffer, bmRequestType, bRequest, wValue, wIndex,
+            wLength);
+        if ((bmRequestType & LIBUSB_ENDPOINT_DIR_MASK) == LIBUSB_ENDPOINT_OUT)
+            memcpy(buffer + LIBUSB_CONTROL_SETUP_SIZE, data, wLength);
+
+        libusb_fill_control_transfer(transfer, dev_handle, buffer, sync_transfer_cb, this, timeout);
+        transfer->flags = LIBUSB_TRANSFER_FREE_BUFFER;
+
+        // Submit to the transfer thread and block until it's done with it
+        {
+            std::unique_lock<std::mutex> lock(control_transfer_mutex);
+
+            // Enqueue the transfer request
+            control_transfer = transfer;
+            control_transfer_status = CONTROL_TRANSFER_PENDING_SUBMIT;
+
+            // Wait for the transfer to complete
+            transfer_complete_condition.wait(lock, [this]() { return control_transfer_status == CONTROL_TRANSFER_COMPLETE; });
+
+            // Clear the transfer
+            control_transfer = nullptr;
+            control_transfer_status = CONTROL_TRANSFER_EMPTY;
+        }
+
+        if ((bmRequestType & LIBUSB_ENDPOINT_DIR_MASK) == LIBUSB_ENDPOINT_IN)
+        {
+            memcpy(data, libusb_control_transfer_get_data(transfer), transfer->actual_length);
+        }
+
+        switch (transfer->status) {
+        case LIBUSB_TRANSFER_COMPLETED:
+            r = transfer->actual_length;
+            break;
+        case LIBUSB_TRANSFER_TIMED_OUT:
+            r = LIBUSB_ERROR_TIMEOUT;
+            break;
+        case LIBUSB_TRANSFER_STALL:
+            r = LIBUSB_ERROR_PIPE;
+            break;
+        case LIBUSB_TRANSFER_NO_DEVICE:
+            r = LIBUSB_ERROR_NO_DEVICE;
+            break;
+        case LIBUSB_TRANSFER_OVERFLOW:
+            r = LIBUSB_ERROR_OVERFLOW;
+            break;
+        case LIBUSB_TRANSFER_ERROR:
+        case LIBUSB_TRANSFER_CANCELLED:
+            r = LIBUSB_ERROR_IO;
+            break;
+        default:
+            r = LIBUSB_ERROR_OTHER;
+        }
+
+        libusb_free_transfer(transfer);
+    }
+    else
+    {
+        // If the transfer thread isn't running, then fall back to the synchronous libusb api
+        r= libusb_control_transfer(dev_handle, bmRequestType, bRequest, wValue, wIndex, data, wLength, timeout);
+    }
+
+    return r;
+}
+
+void USBMgr::usbControlTransferThreadUpdate()
+{
+    // Don't take the lock unless we really need to.
+    // (control_transfer_status is an atomic int)
+    // If it's status changes from non-empty to empty
+    // between the guard clause and activating the lock, no biggie.
+    if (control_transfer_status != CONTROL_TRANSFER_EMPTY)
+    {
+        std::lock_guard<std::mutex> lock(control_transfer_mutex);
+
+        switch (control_transfer_status)
+        {
+        case CONTROL_TRANSFER_EMPTY:
+            assert(control_transfer == nullptr);
+            break;
+        case CONTROL_TRANSFER_PENDING_SUBMIT:
+            assert(control_transfer != nullptr);
+            if (libusb_submit_transfer(control_transfer) == 0)
+            {
+                control_transfer_status = CONTROL_TRANSFER_PENDING_RESPONSE;
+            }
+            else
+            {
+                control_transfer->status = LIBUSB_TRANSFER_ERROR;
+                control_transfer_status = CONTROL_TRANSFER_COMPLETE;
+            }
+            break;
+        case CONTROL_TRANSFER_PENDING_RESPONSE:
+            assert(control_transfer != nullptr);
+            break;
+        case CONTROL_TRANSFER_COMPLETE:
+            // Tell the main thread that it's time to wake back up again
+            transfer_complete_condition.notify_one();
+            break;
+        }
+    }
+}
+
+void LIBUSB_CALL USBMgr::sync_transfer_cb(struct libusb_transfer *transfer)
+{
+    USBMgr * usbManager = reinterpret_cast<USBMgr *>(transfer->user_data);
+
+    // Atomic set of the status is safe in this case
+    // even though it is outside of the control_transfer_mutex lock scope
+    usbManager->control_transfer_status = CONTROL_TRANSFER_COMPLETE;
 }
 
 static void LIBUSB_CALL transfer_completed_callback(struct libusb_transfer *xfr);
@@ -1144,11 +1305,13 @@ void PS3EYECam::ov534_reg_write(uint16_t reg, uint8_t val)
 	//debug("reg=0x%04x, val=0%02x", reg, val);
 	usb_buf[0] = val;
 
-  	ret = libusb_control_transfer(handle_,
-							LIBUSB_ENDPOINT_OUT | 
-							LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE, 
-							0x01, 0x00, reg,
-							usb_buf, 1, 500);
+    ret = mgrPtr->usbControlTransfer(
+        handle_,
+		LIBUSB_ENDPOINT_OUT | 
+		LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE, 
+		0x01, 0x00, reg,
+		usb_buf, 1, 500);
+
 	if (ret < 0) {
 		debug("write failed\n");
 	}
@@ -1158,10 +1321,11 @@ uint8_t PS3EYECam::ov534_reg_read(uint16_t reg)
 {
 	int ret;
 
-	ret = libusb_control_transfer(handle_,
-							LIBUSB_ENDPOINT_IN|LIBUSB_REQUEST_TYPE_VENDOR|LIBUSB_RECIPIENT_DEVICE, 
-							0x01, 0x00, reg,
-							usb_buf, 1, 500);
+    ret = mgrPtr->usbControlTransfer(
+        handle_,
+		LIBUSB_ENDPOINT_IN|LIBUSB_REQUEST_TYPE_VENDOR|LIBUSB_RECIPIENT_DEVICE, 
+		0x01, 0x00, reg,
+		usb_buf, 1, 500);
 
 	//debug("reg=0x%04x, data=0x%02x", reg, usb_buf[0]);
 	if (ret < 0) {
