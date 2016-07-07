@@ -474,10 +474,8 @@ public:
 		return new_frame;
 	}
 
-	uint8_t* Dequeue()
-	{
-		uint8_t* new_frame = (uint8_t*)malloc(frame_size);
-		
+	void Dequeue(uint8_t* new_frame, int frame_width, int frame_height, PS3EYECam::EOutputFormat outputFormat)
+	{		
 		std::unique_lock<std::mutex> lock(mutex);
 
 		// If there is no data in the buffer, wait until data becomes available
@@ -485,13 +483,123 @@ public:
 
 		// Copy from internal buffer
 		uint8_t* source = frame_buffer + frame_size * tail;
-		memcpy(new_frame, source, frame_size);
+
+		if (outputFormat == PS3EYECam::EOutputFormat::Bayer)
+		{
+			memcpy(new_frame, source, frame_size);
+		}
+		else if (outputFormat == PS3EYECam::EOutputFormat::BGR ||
+				 outputFormat == PS3EYECam::EOutputFormat::RGB)
+		{
+			Debayer(frame_width, frame_height, source, new_frame, outputFormat == PS3EYECam::EOutputFormat::BGR);
+		}		
 
 		// Update tail and available count
 		tail = (tail + 1) % num_frames;
 		available--;
+	}
 
-		return new_frame;
+	void Debayer(int frame_width, int frame_height, const uint8_t* inBayer, uint8_t* outBuffer, bool inBGR)
+	{
+		// PSMove output is in the following Bayer format (GRBG):
+		//
+		// G R G R G R
+		// B G B G B G
+		// G R G R G R
+		// B G B G B G
+		//
+		// This is the normal Bayer pattern shifted left one place.
+
+		int				num_output_channels	    = 3;
+		int				source_stride			= frame_width;
+		const uint8_t*	source_row				= inBayer;												// Start at first bayer pixel
+		int				dest_stride				= frame_width * num_output_channels;
+		uint8_t*		dest_row				= outBuffer + dest_stride + num_output_channels + 1; 	// We start outputting at the second pixel of the second row's G component
+		int				swap_br					= inBGR ? 1 : -1;
+
+		// Fill rows 1 to height-1 of the destination buffer. First and last row are filled separately (they are copied from the second row and second-to-last rows respectively)
+		for (int y = 0; y < frame_height-1; source_row += source_stride, dest_row += dest_stride, ++y)
+		{
+			const uint8_t* source		= source_row;
+			const uint8_t* source_end	= source + (source_stride-2);								// -2 to deal with the fact that we're starting at the second pixel of the row and should end at the second-to-last pixel of the row (first and last are filled separately)
+			uint8_t* dest				= dest_row;		
+
+			// Row starting with Green
+			if (y % 2 == 0)
+			{
+				// Fill first pixel (green)
+				dest[-1*swap_br]	= (source[source_stride] + source[source_stride + 2] + 1) >> 1;
+				dest[0]				= source[source_stride + 1];
+				dest[1*swap_br]		= (source[1] + source[source_stride * 2 + 1] + 1) >> 1;		
+
+				source++;
+				dest += num_output_channels;
+
+				// Fill remaining pixel
+				for (; source <= source_end - 2; source += 2, dest += num_output_channels * 2)
+				{
+					// Blue pixel
+					uint8_t* cur_pixel	= dest;
+					cur_pixel[-1*swap_br]	= source[source_stride + 1];
+					cur_pixel[0]			= (source[1] + source[source_stride] + source[source_stride + 2] + source[source_stride * 2 + 1] + 2) >> 2;
+					cur_pixel[1*swap_br]	= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;				
+
+					//  Green pixel
+					uint8_t* next_pixel		= cur_pixel+num_output_channels;
+					next_pixel[-1*swap_br]	= (source[source_stride + 1] + source[source_stride + 3] + 1) >> 1;					
+					next_pixel[0]			= source[source_stride + 2];
+					next_pixel[1*swap_br]	= (source[2] + source[source_stride * 2 + 2] + 1) >> 1;
+				}
+			}
+			else
+			{
+				for (; source <= source_end - 2; source += 2, dest += num_output_channels * 2)
+				{
+					// Red pixel
+					uint8_t* cur_pixel	= dest;
+					cur_pixel[-1*swap_br]	= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;;
+					cur_pixel[0]			= (source[1] + source[source_stride] + source[source_stride + 2] + source[source_stride * 2 + 1] + 2) >> 2;;
+					cur_pixel[1*swap_br]	= source[source_stride + 1];
+
+					// Green pixel
+					uint8_t* next_pixel		= cur_pixel+num_output_channels;
+					next_pixel[-1*swap_br]	= (source[2] + source[source_stride * 2 + 2] + 1) >> 1;
+					next_pixel[0]			= source[source_stride + 2];
+					next_pixel[1*swap_br]	= (source[source_stride + 1] + source[source_stride + 3] + 1) >> 1;
+				}
+			}
+
+			if (source < source_end)
+			{
+				dest[-1*swap_br]	= source[source_stride + 1];
+				dest[0]				= (source[1] + source[source_stride] + source[source_stride + 2] + source[source_stride * 2 + 1] + 2) >> 2;			
+				dest[1*swap_br]		= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;;			
+
+				source++;
+				dest += num_output_channels;
+			}
+
+			// Fill first pixel of row (copy second pixel)
+			uint8_t* first_pixel		= dest_row-num_output_channels;
+			first_pixel[-1*swap_br]		= dest_row[-1*swap_br];
+			first_pixel[0]				= dest_row[0];
+			first_pixel[1*swap_br]		= dest_row[1*swap_br];
+		
+ 			// Fill last pixel of row (copy second-to-last pixel). Note: dest row starts at the *second* pixel of the row, so dest_row + (width-2) * num_output_channels puts us at the last pixel of the row
+			uint8_t* last_pixel				= dest_row + (frame_width - 2)*num_output_channels;
+			uint8_t* second_to_last_pixel	= last_pixel - num_output_channels;
+			
+			last_pixel[-1*swap_br]			= second_to_last_pixel[-1*swap_br];
+			last_pixel[0]					= second_to_last_pixel[0];
+			last_pixel[1*swap_br]			= second_to_last_pixel[1*swap_br];
+		}
+
+		// Fill first & last row
+		for (int i = 0; i < dest_stride; i++)
+		{
+			outBuffer[i]									= outBuffer[i + dest_stride];
+			outBuffer[i + (frame_height - 1)*dest_stride]	= outBuffer[i + (frame_height - 2)*dest_stride];
+		}
 	}
 
 private:
@@ -822,7 +930,7 @@ void PS3EYECam::release()
 	if(usb_buf) free(usb_buf);
 }
 
-bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate)
+bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate, EOutputFormat outputFormat)
 {
 	uint16_t sensor_id;
 
@@ -849,7 +957,7 @@ bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate)
 		frame_height = 240;
 	}
 	frame_rate = ov534_set_frame_rate(desiredFrameRate, true);
-    frame_stride = frame_width;
+	frame_output_format = outputFormat;
 	//
 
 	/* reset bridge */
@@ -921,7 +1029,7 @@ void PS3EYECam::start()
 	ov534_reg_write(0xe0, 0x00); // start stream
 
 	// init and start urb
-	urb->start_transfers(handle_, frame_stride*frame_height);
+	urb->start_transfers(handle_, frame_width*frame_height);
     is_streaming = true;
 }
 
@@ -939,9 +1047,21 @@ void PS3EYECam::stop()
     is_streaming = false;
 }
 
-uint8_t* PS3EYECam::getFrame()
+uint32_t PS3EYECam::getOutputBytesPerPixel() const
 {
-	return urb->frame_queue->Dequeue();
+	if (frame_output_format == EOutputFormat::Bayer)
+		return 1;
+	else if (frame_output_format == EOutputFormat::BGR)
+		return 3;
+	else if (frame_output_format == EOutputFormat::RGB)
+		return 3;
+	
+	return 0;
+}
+
+void PS3EYECam::getFrame(uint8_t* frame)
+{
+	urb->frame_queue->Dequeue(frame, frame_width, frame_height, frame_output_format);
 }
 
 bool PS3EYECam::open_usb()
