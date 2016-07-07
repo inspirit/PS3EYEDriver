@@ -51,6 +51,13 @@ typedef enum{
     PS3EYE_VFLIP                // [false, true]
 } ps3eye_parameter;
 
+typedef enum{
+	PS3EYE_FORMAT_BAYER,        // Output in Bayer. Destination buffer must be width * height bytes
+	PS3EYE_FORMAT_BGR,          // Output in BGR. Destination buffer must be width * height * 3 bytes
+	PS3EYE_FORMAT_RGB,          // Output in RGB. Destination buffer must be width * height * 3 bytes
+} ps3eye_format;
+
+
 /**
  * Initialize and enumerate connected cameras.
  * Needs to be called once before all other API functions.
@@ -78,7 +85,7 @@ ps3eye_count_connected();
  * fps is the target frame rate, 60 usually works fine here
  **/
 ps3eye_t *
-ps3eye_open(int id, int width, int height, int fps);
+ps3eye_open(int id, int width, int height, int fps, ps3eye_format outputFormat);
 
 /**
  * Grab the next frame as YUV422 blob.
@@ -88,8 +95,8 @@ ps3eye_open(int id, int width, int height, int fps);
  * the byte offset between two consecutive lines in the frame
  * will be written to *stride.
  **/
-unsigned char *
-ps3eye_grab_frame(ps3eye_t *eye, int *stride);
+void
+ps3eye_grab_frame(ps3eye_t *eye, unsigned char* frame);
 
 /**
  * Close a PSEye camera device and free allocated resources.
