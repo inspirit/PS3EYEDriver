@@ -29,6 +29,13 @@ namespace ps3eye {
 class PS3EYECam
 {
 public:
+	enum class EOutputFormat
+	{
+		Bayer,					// Output in Bayer. Destination buffer must be width * height bytes
+		BGR,					// Output in BGR. Destination buffer must be width * height * 3 bytes
+		RGB						// Output in RGB. Destination buffer must be width * height * 3 bytes
+	};
+
 	typedef std::shared_ptr<PS3EYECam> PS3EYERef;
 
 	static const uint16_t VENDOR_ID;
@@ -37,7 +44,7 @@ public:
 	PS3EYECam(libusb_device *device);
 	~PS3EYECam();
 
-	bool init(uint32_t width = 0, uint32_t height = 0, uint8_t desiredFrameRate = 30);
+	bool init(uint32_t width = 0, uint32_t height = 0, uint8_t desiredFrameRate = 30, EOutputFormat outputFormat = EOutputFormat::BGR);
 	void start();
 	void stop();
 
@@ -147,13 +154,14 @@ public:
 	
 	// Get a frame from the camera. Notes:
 	// - If there is no frame available, this function will block until one is
-	// - The returned frame is a malloc'd copy; you must free() it yourself when done with it
-	uint8_t* getFrame();
+	// - The output buffer must be sized correctly, depending out the output format. See EOutputFormat.
+	void getFrame(uint8_t* frame);
 
 	uint32_t getWidth() const { return frame_width; }
 	uint32_t getHeight() const { return frame_height; }
 	uint8_t getFrameRate() const { return frame_rate; }
-	uint32_t getRowBytes() const { return frame_stride; }
+	uint32_t getRowBytes() const { return frame_width * getOutputBytesPerPixel(); }
+	uint32_t getOutputBytesPerPixel() const;
 
 	//
 	static const std::vector<PS3EYERef>& getDevices( bool forceRefresh = false );
@@ -199,10 +207,8 @@ private:
 
 	uint32_t frame_width;
 	uint32_t frame_height;
-	uint32_t frame_stride;
 	uint8_t frame_rate;
-
-	double last_qued_frame_time;
+	EOutputFormat frame_output_format;
 
 	//usb stuff
 	libusb_device *device_;

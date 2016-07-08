@@ -3,7 +3,8 @@
  * Thomas Perl <m@thp.io>; 2014-01-10
  * Joseph Howse <josephhowse@nummist.com>; 2014-12-26
  **/
-
+#include <sstream>
+#include <iostream>
 #include <SDL.h>
 #include "ps3eye.h"
 
@@ -42,64 +43,64 @@ print_renderer_info(SDL_Renderer *renderer)
     printf("Renderer: %s\n", renderer_info.name);
 }
 
-int
-main(int argc, char *argv[])
+void run_camera(int width, int height, int fps, Uint32 duration)
 {
-    ps3eye_context ctx(640, 480, 60);
-    if (!ctx.hasDevices()) {
-        printf("No PS3 Eye camera connected\n");
-        return EXIT_FAILURE;
-    }
-    ctx.eye->setFlip(true); /* mirrored left-right */
+	ps3eye_context ctx(width, height, fps);
+	if (!ctx.hasDevices()) {
+		printf("No PS3 Eye camera connected\n");
+		return;
+	}
+	ctx.eye->setFlip(true); /* mirrored left-right */
 
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-        printf("Failed to initialize SDL: %s\n", SDL_GetError());
-        return EXIT_FAILURE;
-    }
+	char title[256];
+	sprintf(title, "%dx%d@%d\n", ctx.eye->getWidth(), ctx.eye->getHeight(), ctx.eye->getFrameRate());
 
-    SDL_Window *window = SDL_CreateWindow(
-            "PS3 Eye - SDL 2", SDL_WINDOWPOS_UNDEFINED,
-            SDL_WINDOWPOS_UNDEFINED, 640, 480, 0);
-    if (window == NULL) {
-        printf("Failed to create window: %s\n", SDL_GetError());
-        return EXIT_FAILURE;
-    }
+	SDL_Window *window = SDL_CreateWindow(
+		title, SDL_WINDOWPOS_UNDEFINED,
+		SDL_WINDOWPOS_UNDEFINED, width, height, 0);
+	if (window == NULL) {
+		printf("Failed to create window: %s\n", SDL_GetError());
+		return;
+	}
 
-    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1,
-                                                SDL_RENDERER_PRESENTVSYNC);
-    if (renderer == NULL) {
-        printf("Failed to create renderer: %s\n", SDL_GetError());
-        SDL_DestroyWindow(window);
-        return EXIT_FAILURE;
-    }
-    SDL_RenderSetLogicalSize(renderer, ctx.eye->getWidth(),
-                             ctx.eye->getHeight());
-    print_renderer_info(renderer);
+	SDL_Renderer *renderer = SDL_CreateRenderer(window, -1,
+		SDL_RENDERER_ACCELERATED);
+	if (renderer == NULL) {
+		printf("Failed to create renderer: %s\n", SDL_GetError());
+		SDL_DestroyWindow(window);
+		return;
+	}
+	SDL_RenderSetLogicalSize(renderer, ctx.eye->getWidth(), ctx.eye->getHeight());
+	print_renderer_info(renderer);
 
-    SDL_Texture *video_tex = SDL_CreateTexture(
-            renderer, SDL_PIXELFORMAT_YUY2, SDL_TEXTUREACCESS_STREAMING,
-            ctx.eye->getWidth(), ctx.eye->getHeight());
-    if (video_tex == NULL) {
-        printf("Failed to create video texture: %s\n", SDL_GetError());
-        SDL_DestroyRenderer(renderer);
-        SDL_DestroyWindow(window);
-        return EXIT_FAILURE;
-    }
+	SDL_Texture *video_tex = SDL_CreateTexture(
+		renderer, SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING,
+		ctx.eye->getWidth(), ctx.eye->getHeight());
+
+	if (video_tex == NULL)
+	{
+		printf("Failed to create video texture: %s\n", SDL_GetError());
+		SDL_DestroyRenderer(renderer);
+		SDL_DestroyWindow(window);
+		return;
+	}
 
 	ctx.eye->start();
 
 	printf("Camera mode: %dx%d@%d\n", ctx.eye->getWidth(), ctx.eye->getHeight(), ctx.eye->getFrameRate());
 
-    SDL_Event e;
-    
-    while (ctx.running) {
-        while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT) {
-                ctx.running = false;
-            }
-        }
+	SDL_Event e;
 
-		uint8_t* new_pixels = ctx.eye->getFrame();
+	Uint32 start_ticks = SDL_GetTicks();
+	while (ctx.running) {
+		if (duration != 0 && (SDL_GetTicks() - start_ticks) / 1000 >= duration)
+			break;
+
+		while (SDL_PollEvent(&e)) {
+			if (e.type == SDL_QUIT || (e.type == SDL_KEYUP && e.key.keysym.scancode == SDL_SCANCODE_ESCAPE)) {
+				ctx.running = false;
+			}			
+		}
 
 		{
 			Uint32 now_ticks = SDL_GetTicks();
@@ -116,21 +117,86 @@ main(int argc, char *argv[])
 
 		void *video_tex_pixels;
 		int pitch;
-        SDL_LockTexture(video_tex, NULL, &video_tex_pixels, &pitch);
-		memcpy(video_tex_pixels, new_pixels, ctx.eye->getRowBytes() * ctx.eye->getHeight());
-        SDL_UnlockTexture(video_tex);
+		SDL_LockTexture(video_tex, NULL, &video_tex_pixels, &pitch);
 
-		free(new_pixels);
+		ctx.eye->getFrame((uint8_t*)video_tex_pixels);
 
-        SDL_RenderCopy(renderer, video_tex, NULL, NULL);
-        SDL_RenderPresent(renderer);
-    }
+		SDL_UnlockTexture(video_tex);
+
+		SDL_RenderCopy(renderer, video_tex, NULL, NULL);
+		SDL_RenderPresent(renderer);
+	}
 
 	ctx.eye->stop();
 
-    SDL_DestroyTexture(video_tex);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
+	SDL_DestroyTexture(video_tex);
+	SDL_DestroyRenderer(renderer);
+	SDL_DestroyWindow(window);
+}
+
+int
+main(int argc, char *argv[])
+{
+	bool mode_test = false;
+    int width = 640;
+    int height = 480;
+    int fps = 60;
+    if (argc > 1)
+    {
+        bool good_arg = false;
+        for (int arg_ix = 1; arg_ix < argc; ++arg_ix)
+        {
+            if (std::string(argv[arg_ix]) == "--qvga")
+            {
+                width = 320;
+                height = 240;
+                good_arg = true;
+            }
+
+            if ((std::string(argv[arg_ix]) == "--fps") && argc > arg_ix)
+            {
+                std::istringstream new_fps_ss( argv[arg_ix+1] );
+                if (new_fps_ss >> fps)
+                {
+                    good_arg = true;
+                }
+            }
+
+			if (std::string(argv[arg_ix]) == "--mode_test")
+			{
+				mode_test = true;
+				good_arg = true;
+			}
+        }
+        if (!good_arg)
+        {
+            std::cerr << "Usage: " << argv[0] << " [--fps XX] [--qvga] [--mode_test]" << std::endl;
+        }
+    }
+
+	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+		printf("Failed to initialize SDL: %s\n", SDL_GetError());
+		return EXIT_FAILURE;
+	}
+
+	if (mode_test)
+	{
+		int rates_qvga[] = { 15, 20, 30, 40, 50, 60, 75, 90, 100, 125, 137, 150, 187 };
+		int num_rates_qvga = sizeof(rates_qvga) / sizeof(int);
+
+		int rates_vga[] = { 15, 20, 30, 40, 50, 60, 75 };
+		int num_rates_vga = sizeof(rates_vga) / sizeof(int);
+
+		for (int index = 0; index < num_rates_qvga; ++index)
+			run_camera(320, 240, rates_qvga[index], 5);
+
+		for (int index = 0; index < num_rates_vga; ++index)
+			run_camera(640, 480, rates_vga[index], 5);
+	}
+	else
+	{
+		run_camera(width, height, fps, 0);
+	}
 
     return EXIT_SUCCESS;
 }

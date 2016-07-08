@@ -28,45 +28,9 @@
 
 
 #include "ps3eye_capi.h"
-
 #include "ps3eye.h"
 
 #include <list>
-
-struct yuv422_buffer_t {
-	yuv422_buffer_t() :
-		pixels	(NULL),
-		size	(0),
-		stride	(0),
-		width	(0),
-		height	(0)
-	{
-	}
-
-    void update(unsigned char *pixels, int stride, int width, int height)
-    {
-		if (this->pixels != NULL)
-		{
-			free(this->pixels);
-			this->pixels = NULL;
-		}
-			
-        size_t size = stride * height;
-        this->size = size;
-
-		this->pixels = pixels;
-        this->stride = stride;
-        this->width = width;
-        this->height = height;
-    }
-    
-    unsigned char *pixels;
-    size_t size;
-
-    int stride;
-    int width;
-    int height;
-};
 
 struct ps3eye_context_t {
     ps3eye_context_t()
@@ -88,13 +52,10 @@ static ps3eye_context_t *
 ps3eye_context = NULL;
 
 struct ps3eye_t {
-    ps3eye_t(ps3eye::PS3EYECam::PS3EYERef eye, int width, int height, int fps)
+    ps3eye_t(ps3eye::PS3EYECam::PS3EYERef eye, int width, int height, int fps, ps3eye_format outputFormat)
         : eye(eye)
-        , width(width)
-        , height(height)
-        , fps(fps)
     {
-        eye->init(width, height, (uint8_t)fps);
+        eye->init(width, height, (uint8_t)fps, (ps3eye::PS3EYECam::EOutputFormat)outputFormat);
         eye->start();
         ps3eye_context->opened_devices.push_back(this);
     }
@@ -107,10 +68,6 @@ struct ps3eye_t {
 
     // Per-device context
     ps3eye::PS3EYECam::PS3EYERef eye;
-    int width;
-    int height;
-    int fps;
-    yuv422_buffer_t frame_buffer;
 };
 
 void
@@ -146,7 +103,7 @@ ps3eye_count_connected()
 }
 
 ps3eye_t *
-ps3eye_open(int id, int width, int height, int fps)
+ps3eye_open(int id, int width, int height, int fps, ps3eye_format outputFormat)
 {
     if (!ps3eye_context) {
         // Library not initialized
@@ -158,31 +115,23 @@ ps3eye_open(int id, int width, int height, int fps)
         return NULL;
     }
 
-    return new ps3eye_t(ps3eye_context->devices[id], width, height, fps);
+    return new ps3eye_t(ps3eye_context->devices[id], width, height, fps, outputFormat);
 }
 
-unsigned char *
-ps3eye_grab_frame(ps3eye_t *eye, int *stride)
+void
+ps3eye_grab_frame(ps3eye_t *eye, unsigned char* frame)
 {
     if (!ps3eye_context) {
         // No context available
-        return NULL;
+        return;
     }
 
     if (!eye) {
         // Eye is not a valid handle
-        return NULL;
+        return;
     }
 
-    eye->frame_buffer.update(eye->eye->getFrame(),
-            eye->eye->getRowBytes(), eye->eye->getWidth(),
-            eye->eye->getHeight());
-
-    if (stride) {
-		*stride = eye->frame_buffer.stride;
-    }
-
-	return eye->frame_buffer.pixels;
+	eye->eye->getFrame(frame);
 }
 
 void

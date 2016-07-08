@@ -66,8 +66,8 @@
 
 namespace ps3eye {
 
-#define TRANSFER_SIZE		16384
-#define NUM_TRANSFERS		8
+#define TRANSFER_SIZE		65536
+#define NUM_TRANSFERS		5
 
 #define OV534_REG_ADDRESS	0xf1	/* sensor address */
 #define OV534_REG_SUBADDR	0xf2
@@ -80,10 +80,6 @@ namespace ps3eye {
 #define OV534_OP_WRITE_2	0x33
 #define OV534_OP_READ_2		0xf9
 
-#define CTRL_TIMEOUT 500
-#define VGA	 0
-#define QVGA 1
-
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(_A) (sizeof(_A) / sizeof((_A)[0]))
 #endif
@@ -93,192 +89,116 @@ static const uint8_t ov534_reg_initdata[][2] = {
 
 	{ OV534_REG_ADDRESS, 0x42 }, /* select OV772x sensor */
 
-	{ 0xc2, 0x0c },
-	{ 0x88, 0xf8 },
-	{ 0xc3, 0x69 },
-	{ 0x89, 0xff },
-	{ 0x76, 0x03 },
 	{ 0x92, 0x01 },
 	{ 0x93, 0x18 },
 	{ 0x94, 0x10 },
 	{ 0x95, 0x10 },
-	{ 0xe2, 0x00 },
-	{ 0xe7, 0x3e },
-
+	{ 0xE2, 0x00 },
+	{ 0xE7, 0x3E },
+	
 	{ 0x96, 0x00 },
-
 	{ 0x97, 0x20 },
 	{ 0x97, 0x20 },
 	{ 0x97, 0x20 },
-	{ 0x97, 0x0a },
-	{ 0x97, 0x3f },
-	{ 0x97, 0x4a },
+	{ 0x97, 0x0A },
+	{ 0x97, 0x3F },
+	{ 0x97, 0x4A },
 	{ 0x97, 0x20 },
 	{ 0x97, 0x15 },
-	{ 0x97, 0x0b },
+	{ 0x97, 0x0B },
 
-	{ 0x8e, 0x40 },
-	{ 0x1f, 0x81 },
+	{ 0x8E, 0x40 },
+	{ 0x1F, 0x81 },
+	{ 0xC0, 0x50 },
+	{ 0xC1, 0x3C },
+	{ 0xC2, 0x01 },
+	{ 0xC3, 0x01 },
+	{ 0x50, 0x89 },
+	{ 0x88, 0x08 },
+	{ 0x8D, 0x00 },
+	{ 0x8E, 0x00 },
+
+	{ 0x1C, 0x00 },		/* video data start (V_FMT) */
+
+	{ 0x1D, 0x00 },		/* RAW8 mode */
+	{ 0x1D, 0x02 },		/* payload size 0x0200 * 4 = 2048 bytes */
+	{ 0x1D, 0x00 },		/* payload size */
+
+	{ 0x1D, 0x01 },		/* frame size = 0x012C00 * 4 = 307200 bytes (640 * 480 @ 8bpp) */
+	{ 0x1D, 0x2C },		/* frame size */
+	{ 0x1D, 0x00 },		/* frame size */
+
+	{ 0x1C, 0x0A },		/* video data start (V_CNTL0) */
+	{ 0x1D, 0x08 },		/* turn on UVC header */
+	{ 0x1D, 0x0E },
+
 	{ 0x34, 0x05 },
-	{ 0xe3, 0x04 },
-	{ 0x88, 0x00 },
+	{ 0xE3, 0x04 },
 	{ 0x89, 0x00 },
 	{ 0x76, 0x00 },
-	{ 0xe7, 0x2e },
-	{ 0x31, 0xf9 },
+	{ 0xE7, 0x2E },
+	{ 0x31, 0xF9 },
 	{ 0x25, 0x42 },
-	{ 0x21, 0xf0 },
-
-	{ 0x1c, 0x00 },
-	{ 0x1d, 0x40 },
-	{ 0x1d, 0x02 }, /* payload size 0x0200 * 4 = 2048 bytes */
-	{ 0x1d, 0x00 }, /* payload size */
-
-// -------------
-
-//	{ 0x1d, 0x01 },/* frame size */		// kwasy
-//	{ 0x1d, 0x4b },/* frame size */
-//	{ 0x1d, 0x00 }, /* frame size */
-
-
-//	{ 0x1d, 0x02 },/* frame size */		// macam
-//	{ 0x1d, 0x57 },/* frame size */
-//	{ 0x1d, 0xff }, /* frame size */
-
-	{ 0x1d, 0x02 },/* frame size */		// jfrancois / linuxtv.org/hg/v4l-dvb
-	{ 0x1d, 0x58 },/* frame size */
-	{ 0x1d, 0x00 }, /* frame size */
-
-// ---------
-
-	{ 0x1c, 0x0a },
-	{ 0x1d, 0x08 }, /* turn on UVC header */
-	{ 0x1d, 0x0e }, /* .. */
-
-	{ 0x8d, 0x1c },
-	{ 0x8e, 0x80 },
-	{ 0xe5, 0x04 },
-
-// ----------------
-//	{ 0xc0, 0x28 },//	kwasy / macam
-//	{ 0xc1, 0x1e },//
-
-	{ 0xc0, 0x50 },		// jfrancois
-	{ 0xc1, 0x3c },
-	{ 0xc2, 0x0c }, 
-
-
-	
+	{ 0x21, 0xF0 },
+	{ 0xE5, 0x04 }	
 };
 
 static const uint8_t ov772x_reg_initdata[][2] = {
 
-	{0x12, 0x80 },
-	{0x11, 0x01 },
-	{0x11, 0x01 },
-	{0x11, 0x01 },
-	{0x11, 0x01 },
-	{0x11, 0x01 },
-	{0x11, 0x01 },
-	{0x11, 0x01 },
-	{0x11, 0x01 },
-	{0x11, 0x01 },
-	{0x11, 0x01 },
-	{0x11, 0x01 },
+	{ 0x12, 0x80 },		/* reset */
+	{ 0x3D, 0x00 },
 
-	{0x3d, 0x03 },
-	{0x17, 0x26 },
-	{0x18, 0xa0 },
-	{0x19, 0x07 },
-	{0x1a, 0xf0 },
-	{0x32, 0x00 },
-	{0x29, 0xa0 },
-	{0x2c, 0xf0 },
-	{0x65, 0x20 },
-	{0x11, 0x01 },
-	{0x42, 0x7f },
-	{0x63, 0xAA }, 	// AWB
-	{0x64, 0xff },
-	{0x66, 0x00 },
-	{0x13, 0xf0 },	// COM8  - jfrancois 0xf0	orig x0f7
-	{0x0d, 0x41 },
-	{0x0f, 0xc5 },
-	{0x14, 0x11 },
+	{ 0x12, 0x01 },		/* Processed Bayer RAW (8bit) */
 
-	{0x22, 0x7f },
-	{0x23, 0x03 },
-	{0x24, 0x40 },
-	{0x25, 0x30 },
-	{0x26, 0xa1 },
-	{0x2a, 0x00 },
-	{0x2b, 0x00 }, 
-	{0x6b, 0xaa },
-	{0x13, 0xff },	// COM8 - jfrancois 0xff orig 0xf7
+	{ 0x11, 0x01 },
+	{ 0x14, 0x40 },
+	{ 0x15, 0x00 },
+	{ 0x63, 0xAA },		// AWB	
+	{ 0x64, 0x87 },
+	{ 0x66, 0x00 },
+	{ 0x67, 0x02 },
+	{ 0x17, 0x26 },
+	{ 0x18, 0xA0 },
+	{ 0x19, 0x07 },
+	{ 0x1A, 0xF0 },
+	{ 0x29, 0xA0 },
+	{ 0x2A, 0x00 },
+	{ 0x2C, 0xF0 },
+	{ 0x20, 0x10 },
+	{ 0x4E, 0x0F },
+	{ 0x3E, 0xF3 },
+	{ 0x0D, 0x41 },
+	{ 0x32, 0x00 },
+	{ 0x13, 0xF0 },		// COM8  - jfrancois 0xf0	orig x0f7
+	{ 0x22, 0x7F },
+	{ 0x23, 0x03 },
+	{ 0x24, 0x40 },
+	{ 0x25, 0x30 },
+	{ 0x26, 0xA1 },
+	{ 0x2A, 0x00 },
+	{ 0x2B, 0x00 },
+	{ 0x13, 0xF7 },
+	{ 0x0C, 0xC0 },
 
-	{0x90, 0x05 },
-	{0x91, 0x01 },
-	{0x92, 0x03 },
-	{0x93, 0x00 },
-	{0x94, 0x60 },
-	{0x95, 0x3c },
-	{0x96, 0x24 },
-	{0x97, 0x1e },
-	{0x98, 0x62 },
-	{0x99, 0x80 },
-	{0x9a, 0x1e },
-	{0x9b, 0x08 },
-	{0x9c, 0x20 },
-	{0x9e, 0x81 },
+	{ 0x11, 0x00 },
+	{ 0x0D, 0x41 },
 
-	{0xa6, 0x04 },
-	{0x7e, 0x0c },
-	{0x7f, 0x16 },
-	{0x80, 0x2a },
-	{0x81, 0x4e },
-    {0x82, 0x61 },
-	{0x83, 0x6f },
-	{0x84, 0x7b },
-	{0x85, 0x86 },
-	{0x86, 0x8e },
-	{0x87, 0x97 },
-	{0x88, 0xa4 },
-	{0x89, 0xaf },
-	{0x8a, 0xc5 },
-	{0x8b, 0xd7 },
-	{0x8c, 0xe8 },
-	{0x8d, 0x20 },
-
-	{0x0c, 0x90 },
-
-	{0x2b, 0x00 }, 
-	{0x22, 0x7f },
-	{0x23, 0x03 },
-	{0x11, 0x01 },
-	{0x0c, 0xd0 },
-	{0x64, 0xff },
-	{0x0d, 0x41 },
-
-	{0x14, 0x41 },
-	{0x0e, 0xcd },
-	{0xac, 0xbf },
-	{0x8e, 0x00 },	// De-noise threshold - jfrancois 0x00 - orig 0x04
-	{0x0c, 0xd0 }
-
+ 	{ 0x8E, 0x00 },		// De-noise threshold - jfrancois 0x00 - orig 0x04
 };
 
 static const uint8_t bridge_start_vga[][2] = {
 	{0x1c, 0x00},
-	{0x1d, 0x40},
-	{0x1d, 0x02},
 	{0x1d, 0x00},
 	{0x1d, 0x02},
-	{0x1d, 0x58},
 	{0x1d, 0x00},
+	{0x1d, 0x01},	/* frame size = 0x012C00 * 4 = 307200 bytes (640 * 480 @ 8bpp) */
+	{0x1d, 0x2C},	/* frame size */
+	{0x1d, 0x00},	/* frame size */
 	{0xc0, 0x50},
 	{0xc1, 0x3c},
 };
 static const uint8_t sensor_start_vga[][2] = {
-	{0x12, 0x00},
+	{0x12, 0x01},
 	{0x17, 0x26},
 	{0x18, 0xa0},
 	{0x19, 0x07},
@@ -289,17 +209,17 @@ static const uint8_t sensor_start_vga[][2] = {
 };
 static const uint8_t bridge_start_qvga[][2] = {
 	{0x1c, 0x00},
-	{0x1d, 0x40},
+	{0x1d, 0x00},
 	{0x1d, 0x02},
-	{0x1d, 0x00},
-	{0x1d, 0x01},
-	{0x1d, 0x4b},
-	{0x1d, 0x00},
+	{0x1d, 0x00},	
+	{0x1d, 0x00},	/* frame size = 0x004B00 * 4 = 76800 bytes (320 * 240 @ 8bpp) */
+	{0x1d, 0x4b},	/* frame size */
+	{0x1d, 0x00},	/* frame size */
 	{0xc0, 0x28},
 	{0xc1, 0x1e},
 };
 static const uint8_t sensor_start_qvga[][2] = {
-	{0x12, 0x40},
+	{0x12, 0x41},
 	{0x17, 0x3f},
 	{0x18, 0x50},
 	{0x19, 0x03},
@@ -554,10 +474,8 @@ public:
 		return new_frame;
 	}
 
-	uint8_t* Dequeue()
-	{
-		uint8_t* new_frame = (uint8_t*)malloc(frame_size);
-		
+	void Dequeue(uint8_t* new_frame, int frame_width, int frame_height, PS3EYECam::EOutputFormat outputFormat)
+	{		
 		std::unique_lock<std::mutex> lock(mutex);
 
 		// If there is no data in the buffer, wait until data becomes available
@@ -565,13 +483,123 @@ public:
 
 		// Copy from internal buffer
 		uint8_t* source = frame_buffer + frame_size * tail;
-		memcpy(new_frame, source, frame_size);
+
+		if (outputFormat == PS3EYECam::EOutputFormat::Bayer)
+		{
+			memcpy(new_frame, source, frame_size);
+		}
+		else if (outputFormat == PS3EYECam::EOutputFormat::BGR ||
+				 outputFormat == PS3EYECam::EOutputFormat::RGB)
+		{
+			Debayer(frame_width, frame_height, source, new_frame, outputFormat == PS3EYECam::EOutputFormat::BGR);
+		}		
 
 		// Update tail and available count
 		tail = (tail + 1) % num_frames;
 		available--;
+	}
 
-		return new_frame;
+	void Debayer(int frame_width, int frame_height, const uint8_t* inBayer, uint8_t* outBuffer, bool inBGR)
+	{
+		// PSMove output is in the following Bayer format (GRBG):
+		//
+		// G R G R G R
+		// B G B G B G
+		// G R G R G R
+		// B G B G B G
+		//
+		// This is the normal Bayer pattern shifted left one place.
+
+		int				num_output_channels	    = 3;
+		int				source_stride			= frame_width;
+		const uint8_t*	source_row				= inBayer;												// Start at first bayer pixel
+		int				dest_stride				= frame_width * num_output_channels;
+		uint8_t*		dest_row				= outBuffer + dest_stride + num_output_channels + 1; 	// We start outputting at the second pixel of the second row's G component
+		int				swap_br					= inBGR ? 1 : -1;
+
+		// Fill rows 1 to height-1 of the destination buffer. First and last row are filled separately (they are copied from the second row and second-to-last rows respectively)
+		for (int y = 0; y < frame_height-1; source_row += source_stride, dest_row += dest_stride, ++y)
+		{
+			const uint8_t* source		= source_row;
+			const uint8_t* source_end	= source + (source_stride-2);								// -2 to deal with the fact that we're starting at the second pixel of the row and should end at the second-to-last pixel of the row (first and last are filled separately)
+			uint8_t* dest				= dest_row;		
+
+			// Row starting with Green
+			if (y % 2 == 0)
+			{
+				// Fill first pixel (green)
+				dest[-1*swap_br]	= (source[source_stride] + source[source_stride + 2] + 1) >> 1;
+				dest[0]				= source[source_stride + 1];
+				dest[1*swap_br]		= (source[1] + source[source_stride * 2 + 1] + 1) >> 1;		
+
+				source++;
+				dest += num_output_channels;
+
+				// Fill remaining pixel
+				for (; source <= source_end - 2; source += 2, dest += num_output_channels * 2)
+				{
+					// Blue pixel
+					uint8_t* cur_pixel	= dest;
+					cur_pixel[-1*swap_br]	= source[source_stride + 1];
+					cur_pixel[0]			= (source[1] + source[source_stride] + source[source_stride + 2] + source[source_stride * 2 + 1] + 2) >> 2;
+					cur_pixel[1*swap_br]	= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;				
+
+					//  Green pixel
+					uint8_t* next_pixel		= cur_pixel+num_output_channels;
+					next_pixel[-1*swap_br]	= (source[source_stride + 1] + source[source_stride + 3] + 1) >> 1;					
+					next_pixel[0]			= source[source_stride + 2];
+					next_pixel[1*swap_br]	= (source[2] + source[source_stride * 2 + 2] + 1) >> 1;
+				}
+			}
+			else
+			{
+				for (; source <= source_end - 2; source += 2, dest += num_output_channels * 2)
+				{
+					// Red pixel
+					uint8_t* cur_pixel	= dest;
+					cur_pixel[-1*swap_br]	= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;;
+					cur_pixel[0]			= (source[1] + source[source_stride] + source[source_stride + 2] + source[source_stride * 2 + 1] + 2) >> 2;;
+					cur_pixel[1*swap_br]	= source[source_stride + 1];
+
+					// Green pixel
+					uint8_t* next_pixel		= cur_pixel+num_output_channels;
+					next_pixel[-1*swap_br]	= (source[2] + source[source_stride * 2 + 2] + 1) >> 1;
+					next_pixel[0]			= source[source_stride + 2];
+					next_pixel[1*swap_br]	= (source[source_stride + 1] + source[source_stride + 3] + 1) >> 1;
+				}
+			}
+
+			if (source < source_end)
+			{
+				dest[-1*swap_br]	= source[source_stride + 1];
+				dest[0]				= (source[1] + source[source_stride] + source[source_stride + 2] + source[source_stride * 2 + 1] + 2) >> 2;			
+				dest[1*swap_br]		= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;;			
+
+				source++;
+				dest += num_output_channels;
+			}
+
+			// Fill first pixel of row (copy second pixel)
+			uint8_t* first_pixel		= dest_row-num_output_channels;
+			first_pixel[-1*swap_br]		= dest_row[-1*swap_br];
+			first_pixel[0]				= dest_row[0];
+			first_pixel[1*swap_br]		= dest_row[1*swap_br];
+		
+ 			// Fill last pixel of row (copy second-to-last pixel). Note: dest row starts at the *second* pixel of the row, so dest_row + (width-2) * num_output_channels puts us at the last pixel of the row
+			uint8_t* last_pixel				= dest_row + (frame_width - 2)*num_output_channels;
+			uint8_t* second_to_last_pixel	= last_pixel - num_output_channels;
+			
+			last_pixel[-1*swap_br]			= second_to_last_pixel[-1*swap_br];
+			last_pixel[0]					= second_to_last_pixel[0];
+			last_pixel[1*swap_br]			= second_to_last_pixel[1*swap_br];
+		}
+
+		// Fill first & last row
+		for (int i = 0; i < dest_stride; i++)
+		{
+			outBuffer[i]									= outBuffer[i + dest_stride];
+			outBuffer[i + (frame_height - 1)*dest_stride]	= outBuffer[i + (frame_height - 2)*dest_stride];
+		}
 	}
 
 private:
@@ -902,7 +930,7 @@ void PS3EYECam::release()
 	if(usb_buf) free(usb_buf);
 }
 
-bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate)
+bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate, EOutputFormat outputFormat)
 {
 	uint16_t sensor_id;
 
@@ -929,7 +957,7 @@ bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate)
 		frame_height = 240;
 	}
 	frame_rate = ov534_set_frame_rate(desiredFrameRate, true);
-    frame_stride = frame_width * 2;
+	frame_output_format = outputFormat;
 	//
 
 	/* reset bridge */
@@ -1001,7 +1029,7 @@ void PS3EYECam::start()
 	ov534_reg_write(0xe0, 0x00); // start stream
 
 	// init and start urb
-	urb->start_transfers(handle_, frame_stride*frame_height);
+	urb->start_transfers(handle_, frame_width*frame_height);
     is_streaming = true;
 }
 
@@ -1019,9 +1047,21 @@ void PS3EYECam::stop()
     is_streaming = false;
 }
 
-uint8_t* PS3EYECam::getFrame()
+uint32_t PS3EYECam::getOutputBytesPerPixel() const
 {
-	return urb->frame_queue->Dequeue();
+	if (frame_output_format == EOutputFormat::Bayer)
+		return 1;
+	else if (frame_output_format == EOutputFormat::BGR)
+		return 3;
+	else if (frame_output_format == EOutputFormat::RGB)
+		return 3;
+	
+	return 0;
+}
+
+void PS3EYECam::getFrame(uint8_t* frame)
+{
+	urb->frame_queue->Dequeue(frame, frame_width, frame_height, frame_output_format);
 }
 
 bool PS3EYECam::open_usb()
@@ -1094,24 +1134,29 @@ uint8_t PS3EYECam::ov534_set_frame_rate(uint8_t frame_rate, bool dry_run)
      };
      const struct rate_s *r;
      static const struct rate_s rate_0[] = { /* 640x480 */
-             {60, 0x01, 0xc1, 0x04},
+			 {75, 0x01, 0x81, 0x02},
+             {60, 0x00, 0x41, 0x04},
              {50, 0x01, 0x41, 0x02},
              {40, 0x02, 0xc1, 0x04},
              {30, 0x04, 0x81, 0x02},
-             {15, 0x03, 0x41, 0x04},
+			 {20, 0x04, 0x41, 0x02},
+             {15, 0x09, 0x81, 0x02},
      };
      static const struct rate_s rate_1[] = { /* 320x240 */
              {205, 0x01, 0xc1, 0x02}, /* 205 FPS: video is partly corrupt */
              {187, 0x01, 0x81, 0x02}, /* 187 FPS or below: video is valid */
-             {150, 0x01, 0xc1, 0x04},
-             {137, 0x02, 0xc1, 0x02},
-             {125, 0x02, 0x81, 0x02},
+             {150, 0x00, 0x41, 0x04},
+			 {137, 0x02, 0xc1, 0x02},
+             {125, 0x01, 0x41, 0x02},
              {100, 0x02, 0xc1, 0x04},
-             {75, 0x03, 0xc1, 0x04},
+			 {90, 0x03, 0x81, 0x02},
+             {75, 0x04, 0x81, 0x02},
              {60, 0x04, 0xc1, 0x04},
-             {50, 0x02, 0x41, 0x04},
-             {37, 0x03, 0x41, 0x04},
+             {50, 0x04, 0x41, 0x02},
+             {40, 0x06, 0x81, 0x03},
              {30, 0x04, 0x41, 0x04},
+			 {20, 0x18, 0xc1, 0x02},
+			 {15, 0x18, 0x81, 0x02},
      };
 
      if (frame_width == 640) {
