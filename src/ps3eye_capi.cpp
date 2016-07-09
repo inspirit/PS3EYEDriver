@@ -118,6 +118,26 @@ ps3eye_open(int id, int width, int height, int fps, ps3eye_format outputFormat)
     return new ps3eye_t(ps3eye_context->devices[id], width, height, fps, outputFormat);
 }
 
+int
+ps3eye_get_unique_identifier(ps3eye_t * eye_t, char *out_identifier, int max_identifier_length)
+{
+    if (!ps3eye_context) 
+    {
+        // No context available
+        return -1;
+    }
+    
+    if (!eye_t) 
+    {
+        // Eye is not a valid handle
+        return -1;
+    }
+
+    bool success = eye_t->eye->getUSBPortPath(out_identifier, max_identifier_length);
+
+    return success ? 0 : -1;
+}
+
 void
 ps3eye_grab_frame(ps3eye_t *eye, unsigned char* frame)
 {
