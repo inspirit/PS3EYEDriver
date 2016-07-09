@@ -88,6 +88,13 @@ ps3eye_t *
 ps3eye_open(int id, int width, int height, int fps, ps3eye_format outputFormat);
 
 /**
+ * Get the string that uniquely identifies this camera
+ * Returns 0 on success, -1 on failure
+ **/
+int
+ps3eye_get_unique_identifier(ps3eye_t * eye, char *out_identifier, int max_identifier_length);
+
+/**
  * Grab the next frame as YUV422 blob.
  * A pointer to the buffer will be passed back. The buffer
  * will only be valid until the next call, or until the eye
