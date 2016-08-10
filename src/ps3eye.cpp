@@ -325,8 +325,8 @@ std::shared_ptr<USBMgr> USBMgr::sInstance;
 int                     USBMgr::sTotalDevices = 0;
 
 USBMgr::USBMgr() :
-	exit_signaled({ false }),
-	active_camera_count({ 0 })
+	exit_signaled(false),
+	active_camera_count(0)
 {
     libusb_init(&usb_context);
     libusb_set_debug(usb_context, 1);
@@ -935,7 +935,7 @@ void PS3EYECam::release()
 	if(usb_buf) free(usb_buf);
 }
 
-bool PS3EYECam::init(uint32_t width, uint32_t height, uint8_t desiredFrameRate, EOutputFormat outputFormat)
+bool PS3EYECam::init(uint32_t width, uint32_t height, uint16_t desiredFrameRate, EOutputFormat outputFormat)
 {
 	uint16_t sensor_id;
 
@@ -1173,40 +1173,55 @@ void PS3EYECam::ov534_set_led(int status)
 }
 
 /* validate frame rate and (if not dry run) set it */
-uint8_t PS3EYECam::ov534_set_frame_rate(uint8_t frame_rate, bool dry_run)
+uint16_t PS3EYECam::ov534_set_frame_rate(uint16_t frame_rate, bool dry_run)
 {
      int i;
      struct rate_s {
-             uint8_t fps;
+             uint16_t fps;
              uint8_t r11;
              uint8_t r0d;
              uint8_t re5;
      };
      const struct rate_s *r;
      static const struct rate_s rate_0[] = { /* 640x480 */
-			 {75, 0x01, 0x81, 0x02},
+             {83, 0x01, 0xc1, 0x02}, /* 83 FPS: video is partly corrupt */
+             {75, 0x01, 0x81, 0x02}, /* 75 FPS or below: video is valid */
              {60, 0x00, 0x41, 0x04},
              {50, 0x01, 0x41, 0x02},
              {40, 0x02, 0xc1, 0x04},
              {30, 0x04, 0x81, 0x02},
-			 {20, 0x04, 0x41, 0x02},
+             {25, 0x00, 0x01, 0x02},
+             {20, 0x04, 0x41, 0x02},
              {15, 0x09, 0x81, 0x02},
+             {10, 0x09, 0x41, 0x02},
+             {8, 0x02, 0x01, 0x02},
+             {5, 0x04, 0x01, 0x02},
+             {3, 0x06, 0x01, 0x02},
+             {2, 0x09, 0x01, 0x02},
      };
      static const struct rate_s rate_1[] = { /* 320x240 */
-             {205, 0x01, 0xc1, 0x02}, /* 205 FPS: video is partly corrupt */
+             {290, 0x00, 0xc1, 0x04},
+             {205, 0x01, 0xc1, 0x02}, /* 205 FPS or above: video is partly corrupt */
              {187, 0x01, 0x81, 0x02}, /* 187 FPS or below: video is valid */
              {150, 0x00, 0x41, 0x04},
-			 {137, 0x02, 0xc1, 0x02},
+             {137, 0x02, 0xc1, 0x02},
              {125, 0x01, 0x41, 0x02},
              {100, 0x02, 0xc1, 0x04},
-			 {90, 0x03, 0x81, 0x02},
+             {90, 0x03, 0x81, 0x02},
              {75, 0x04, 0x81, 0x02},
              {60, 0x04, 0xc1, 0x04},
              {50, 0x04, 0x41, 0x02},
              {40, 0x06, 0x81, 0x03},
+             {37, 0x00, 0x01, 0x04},
              {30, 0x04, 0x41, 0x04},
-			 {20, 0x18, 0xc1, 0x02},
-			 {15, 0x18, 0x81, 0x02},
+             {17, 0x18, 0xc1, 0x02},
+             {15, 0x18, 0x81, 0x02},
+             {12, 0x02, 0x01, 0x04},
+             {10, 0x18, 0x41, 0x02},
+             {7, 0x04, 0x01, 0x04},
+             {5, 0x06, 0x01, 0x04},
+             {3, 0x09, 0x01, 0x04},
+             {2, 0x18, 0x01, 0x02},
      };
 
      if (frame_width == 640) {
