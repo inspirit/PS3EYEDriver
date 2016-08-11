@@ -44,7 +44,7 @@ public:
 	PS3EYECam(libusb_device *device);
 	~PS3EYECam();
 
-	bool init(uint32_t width = 0, uint32_t height = 0, uint8_t desiredFrameRate = 30, EOutputFormat outputFormat = EOutputFormat::BGR);
+	bool init(uint32_t width = 0, uint32_t height = 0, uint16_t desiredFrameRate = 30, EOutputFormat outputFormat = EOutputFormat::BGR);
 	void start();
 	void stop();
 
@@ -162,7 +162,7 @@ public:
 
 	uint32_t getWidth() const { return frame_width; }
 	uint32_t getHeight() const { return frame_height; }
-	uint8_t getFrameRate() const { return frame_rate; }
+	uint16_t getFrameRate() const { return frame_rate; }
 	uint32_t getRowBytes() const { return frame_width * getOutputBytesPerPixel(); }
 	uint32_t getOutputBytesPerPixel() const;
 
@@ -176,7 +176,7 @@ private:
 	void release();
 
 	// usb ops
-	uint8_t ov534_set_frame_rate(uint8_t frame_rate, bool dry_run = false);
+	uint16_t ov534_set_frame_rate(uint16_t frame_rate, bool dry_run = false);
 	void ov534_set_led(int status);
 	void ov534_reg_write(uint16_t reg, uint8_t val);
 	uint8_t ov534_reg_read(uint16_t reg);
@@ -210,7 +210,7 @@ private:
 
 	uint32_t frame_width;
 	uint32_t frame_height;
-	uint8_t frame_rate;
+	uint16_t frame_rate;
 	EOutputFormat frame_output_format;
 
 	//usb stuff

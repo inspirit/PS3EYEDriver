@@ -18,7 +18,7 @@ struct ps3eye_context {
     {
         if (hasDevices()) {
             eye = devices[0];
-            eye->init(width, height, (uint8_t)fps);
+            eye->init(width, height, (uint16_t)fps);
         }
     }
 
@@ -181,10 +181,10 @@ main(int argc, char *argv[])
 
 	if (mode_test)
 	{
-		int rates_qvga[] = { 15, 20, 30, 40, 50, 60, 75, 90, 100, 125, 137, 150, 187 };
+		int rates_qvga[] = { 2, 3, 5, 7, 10, 12, 15, 17, 30, 37, 40, 50, 60, 75, 90, 100, 125, 137, 150, 187 };
 		int num_rates_qvga = sizeof(rates_qvga) / sizeof(int);
 
-		int rates_vga[] = { 15, 20, 30, 40, 50, 60, 75 };
+		int rates_vga[] = { 2, 3, 5, 8, 10, 15, 20, 25, 30, 40, 50, 60, 75 };
 		int num_rates_vga = sizeof(rates_vga) / sizeof(int);
 
 		for (int index = 0; index < num_rates_qvga; ++index)
