@@ -25,15 +25,60 @@ project from an unknown source, allow this.  It will also ask you to
 upgrade the project to the current version of Visual Studio, allow
 this as well.  Build Debug and Release for Win32 and x64. 
 
-5. Clone the github repository into your working directory.  In this
-directory you will find a VC2013 subdirectory.  Open the
-PS3EyeDriver.sln file with visual studio.  Set the SDLExample project
-to be the startup project.  You should be able to build for Debug and
-Release Win32 and x64.  It should build with no warnings or errors.  If you
-get errors, make sure the libusb and SDL directories are in the right
-places.
+5. Clone the github repository into your working directory. Open up
+Visual Studio and create a new project PS3EyeDriverMSVC in your
+working directory, checking the box that says "Create a Directory for
+the Solution".  Click Next at the first screen, and then in the
+Application Settings select the "Static Library" radio button.
+Uncheck the "Precompiled Headers" and Security Development Lifecycle
+checkboxes and hit "Finish"
 
-6. Before you can run the program you will have to install the usb
+In the PS3EyeDriverMSVC project, Do "Add existing Item" to add
+"ps3eye.h" and "ps3eye_capi.h" from the PS3EyeDriver/src directory to
+the Header Files section.  Add "ps3eye.cpp" and "ps3eye_capi.c" to the
+Source Files section.
+
+Add libusb/include/libusb-1.0 from your working directory to the
+"Additional Include Directories" properties for the project.  Select
+"All Configurations" when you do this so it sets up both Debug and
+Release.
+
+You should be able to build both "Debug" and "Release" configurations
+now.  If you get errors, check your include paths.
+
+6. To test the driver, build the SDL example.  Right click the
+solution in the Solution explorer and do Add->New Project.  Name the
+project "SDLExample".  In the application settings, check the "Windows
+Application" checkbox, check "Empty Project" and uncheck "SDL Checks".
+Hit "Finish".
+
+Add main.cpp from PS3Eye/sdl to the Source Files for the SDLExample
+project.  Add libusb/include/libusb-1.0 from your working directory to
+the Additional Include Files for the SDLExample project. Also add
+SDL2/include and PS3Eye/src to the include files.
+
+Add "SDL2.lib;SDL2Main.lib;libusb-1.0.lib;" to the "Additional
+Dependencies" section of the Input linker properties for "All
+Configurations" of the SDLExample Project.  In "Additional Library
+Directories" for the "General" section of the project, add the
+libusb/MS32/static directory.
+
+The "Debug" and "Release" versions use different versions of the SDL
+library.  For the Debug build, add SDL2/VisualC/Win32/Debug to the
+library directories, and for the release build, add
+SDL2/Visualc/Win32/Release.
+
+Right click the SDLExample project and do "Set as Startup Project" so
+it gets run when you do "Debug->Start Debugging"
+
+Add a custom build event for all configurations of "copy
+..\..\SDL2\VisualC\$(Platform)\$(Configuration)\SDL2.dll $(OutDir)" to
+copy the proper version of the SDL2 dll into the output directory.
+
+You should be able to build Debug and Release for Win32 now.  If you
+get undefined symbol errors, check your file include paths.
+
+7. Before you can run the program you will have to install the usb
 driver for your PS3Eye camera.  I used zadig_2.2 to do this.  Other
 versions will probably work as well.  First, plug in your PS3Eye
 camera.  There are two devices, identically named, on the PS3Eye.  One
@@ -52,7 +97,7 @@ driver is installed you will have usbaudio set to the current driver,
 so don't mess with this one.  Now pick a driver from the list and
 install it.  I had success so far with the WinUSB choice.
 
-7. Go back to your Visual Studio window and try running the SDL
+8. Go back to your Visual Studio window and try running the SDL
 example program in Release or Debug mode, on the Win32 or x64
 platform.  You should see a window with the camera image pop up.  You
 can add options to the command line in the Debugging properties for
@@ -66,9 +111,8 @@ library which wouldn't build with anything other than the 0.8.4
 version of cinder, and VS2013 binaries weren't available for that
 version.
 
-The SDLExample project copies the correct version of SDL2.dll into the
-output directory with a post build step.  I had a 32 bit version of
-SDL2.dll in my path that caused the 64 bit executable not to load.
+The above procedure tests the 32 bit version of the driver.  To try
+the 64 bit version, make a new 64 bit platform, and change the libusb
+library include paths to libusb/m64/static and the SDL2 library
+include paths to SDL2/VisualC/x64 for that platform.
 
-
- 
