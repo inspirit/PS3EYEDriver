@@ -1,0 +1,60 @@
+Here are the steps I used to build and test the PS3Eye driver in
+microsoft visual studio community 2013.  I think this would probably
+work with VS2015, but I haven't tested it.
+
+1. Create a working directory to hold stuff.  I used c:\PS3EyeStuff.
+
+2. Get the libusb binary package for VS2013. I used libusb-1.0.20.7z.
+Unpack the file into your working directory.  You may have to find the
+7Zip extractor program and install it.  There should be a libusb top
+level directory, with include directly underneath it.
+
+3. Get the SDL2 library.  I used SDL2-2.0.4.zip.  If you use a
+different version you will have to modify the C and Library include
+directories in the MSVC build files to reflect this change.  Unpack it
+into your working directory.  Make sure you wind up with an
+SDL2-2.0.4(or whatever) directory with include directly underneath it.
+
+4. Build the SDL library.  Go to the VisualC subdirectory in your SDL2
+directory and open SDL.sln.  It will complain that you have opened a
+project from an unknown source, allow this.  It will also ask you to
+upgrade the project to the current version of Visual Studio, allow
+this as well.  Build Debug and Release for Win32.  You can try x64
+also if you want, but I haven't tested this.
+
+5. Clone the github repository into your working directory.  In this
+directory you will find a VC2013 subdirectory.  Open the
+PS3EyeDriver.sln file with visual studio.  Set the SDLExample project
+to be the startup project.  You should be able to build for Debug and
+Release Win32.  It should build with no warnings or errors.  If you
+get errors, make sure the libusb and SDL directories are in the right
+places.
+
+6. Before you can run the program you will have to install the usb
+driver for your PS3Eye camera.  I used zadig_2.2 to do this.  Other
+versions will probably work as well.  First, plug in your PS3Eye
+camera.  There are two devices, identically named, on the PS3Eye.  One
+is an audio device, and the other is the camera device.  You can't
+tell which is which in the device manager.  In windows 7, it found and
+installed a driver for the audio portion of the camera when I
+initially plugged in the camera, but couldn't find a driver for the
+video portion.  
+
+Next, run zadig. If zadig doesn't find your camera, it may already
+have a driver installed.  Click the "List all Devices" box in the
+"Options" menu.  Check the pull down box and you should see one (or
+maybe two, if you have "List all Devices" checked).  The device that
+worked for me was USB Camera-B4.09.24.1 (Interface 0).  If the audio
+driver is installed you will have usbaudio set to the current driver,
+so don't mess with this one.  Now pick a driver from the list and
+install it.  I had success so far with the WinUSB choice.
+
+7. Go back to your Visual Studio window and try running the SDL
+example program in Release or Debug mode.  You should see a window
+with the camera image pop up.  You can add options to the command line
+in the Debugging properties for the project.  To capture at 320x200,
+add --qvga to the command line.  To run through all the modes one by
+one, use --mode_test.
+
+
+ 

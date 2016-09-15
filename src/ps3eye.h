@@ -8,8 +8,18 @@
 
 #include <memory>
 
+// Get rid of annoying zero length structure warnings from libusb.h in MSVC
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4200)
+#endif
 
 #include "libusb.h"
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #ifndef __STDC_CONSTANT_MACROS
 #  define __STDC_CONSTANT_MACROS
