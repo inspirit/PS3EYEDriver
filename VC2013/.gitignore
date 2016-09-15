@@ -1,0 +1,13 @@
+# Visual Studio only files to ignore
+*.ilk
+*.pdb
+*.ipch
+*.sdf
+*.suo
+*.log
+*.tlog
+*.idb
+*.cache
+*.user
+*.opensdf
+*.psess
