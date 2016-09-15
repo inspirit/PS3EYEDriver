@@ -1,4 +1,5 @@
 # Visual Studio only files to ignore
+
 *.ilk
 *.pdb
 *.ipch
@@ -11,3 +12,7 @@
 *.user
 *.opensdf
 *.psess
+
+#Emacs previous version files
+*~
+

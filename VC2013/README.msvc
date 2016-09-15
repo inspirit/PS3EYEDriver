@@ -1,6 +1,8 @@
 Here are the steps I used to build and test the PS3Eye driver in
 microsoft visual studio community 2013.  I think this would probably
-work with VS2015, but I haven't tested it.
+work with VS2015, but I haven't tested it.  Tested with both Win32 and
+x64 builds in Windows 7 and 10.
+
 
 1. Create a working directory to hold stuff.  I used c:\PS3EyeStuff.
 
@@ -21,14 +23,13 @@ directly underneath it.
 directory and open SDL.sln.  It will complain that you have opened a
 project from an unknown source, allow this.  It will also ask you to
 upgrade the project to the current version of Visual Studio, allow
-this as well.  Build Debug and Release for Win32.  You can try x64
-also if you want, but I haven't tested this.
+this as well.  Build Debug and Release for Win32 and x64. 
 
 5. Clone the github repository into your working directory.  In this
 directory you will find a VC2013 subdirectory.  Open the
 PS3EyeDriver.sln file with visual studio.  Set the SDLExample project
 to be the startup project.  You should be able to build for Debug and
-Release Win32.  It should build with no warnings or errors.  If you
+Release Win32 and x64.  It should build with no warnings or errors.  If you
 get errors, make sure the libusb and SDL directories are in the right
 places.
 
@@ -52,11 +53,22 @@ so don't mess with this one.  Now pick a driver from the list and
 install it.  I had success so far with the WinUSB choice.
 
 7. Go back to your Visual Studio window and try running the SDL
-example program in Release or Debug mode.  You should see a window
-with the camera image pop up.  You can add options to the command line
-in the Debugging properties for the project.  To capture at 320x200,
-add --qvga to the command line.  To run through all the modes one by
-one, use --mode_test.
+example program in Release or Debug mode, on the Win32 or x64
+platform.  You should see a window with the camera image pop up.  You
+can add options to the command line in the Debugging properties for
+the project.  To capture at 320x200, add --qvga to the command line.
+To run through all the modes one by one, use --mode_test.
+
+Notes:
+I only made the SDL example work.  I tried the cinder stuff, but it
+wouldn't build with the 0.9.0 version of cinder.  It also used a ciUI
+library which wouldn't build with anything other than the 0.8.4
+version of cinder, and VS2013 binaries weren't available for that
+version.
+
+The SDLExample project copies the correct version of SDL2.dll into the
+output directory with a post build step.  I had a 32 bit version of
+SDL2.dll in my path that caused the 64 bit executable not to load.
 
 
  
