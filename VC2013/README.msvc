@@ -6,14 +6,16 @@ work with VS2015, but I haven't tested it.
 
 2. Get the libusb binary package for VS2013. I used libusb-1.0.20.7z.
 Unpack the file into your working directory.  You may have to find the
-7Zip extractor program and install it.  There should be a libusb top
-level directory, with include directly underneath it.
+7Zip extractor program and install it.  Rename whatever version
+specific directory you get to just libusb so the paths in the MSVC
+project files know where to find the header and lib files.  There
+should be a libusb top level directory, with include directly
+underneath it.
 
-3. Get the SDL2 library.  I used SDL2-2.0.4.zip.  If you use a
-different version you will have to modify the C and Library include
-directories in the MSVC build files to reflect this change.  Unpack it
-into your working directory.  Make sure you wind up with an
-SDL2-2.0.4(or whatever) directory with include directly underneath it.
+3. Get the SDL2 library.  I used SDL2-2.0.4.zip.  Unpack it into your
+working directory.  Rename whatever version specific directory to just
+SDL2.  Make sure you wind up with an SDL2 directory with include
+directly underneath it.
 
 4. Build the SDL library.  Go to the VisualC subdirectory in your SDL2
 directory and open SDL.sln.  It will complain that you have opened a
