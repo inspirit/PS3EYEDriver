@@ -324,10 +324,10 @@ class USBMgr
 std::shared_ptr<USBMgr> USBMgr::sInstance;
 int                     USBMgr::sTotalDevices = 0;
 
-USBMgr::USBMgr() :
-	exit_signaled(false),
-	active_camera_count(0)
+USBMgr::USBMgr() 
 {
+	exit_signaled = false;
+	active_camera_count = 0;
     libusb_init(&usb_context);
     libusb_set_debug(usb_context, 1);
 }
