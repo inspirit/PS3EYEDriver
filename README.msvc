@@ -1,0 +1,118 @@
+Here are the steps I used to build and test the PS3Eye driver in
+microsoft visual studio community 2013.  I think this would probably
+work with VS2015, but I haven't tested it.  Tested with both Win32 and
+x64 builds in Windows 7 and 10.
+
+
+1. Create a working directory to hold stuff.  I used c:\PS3EyeStuff.
+
+2. Get the libusb binary package for VS2013. I used libusb-1.0.20.7z.
+Unpack the file into your working directory.  You may have to find the
+7Zip extractor program and install it.  Rename whatever version
+specific directory you get to just libusb so the paths in the MSVC
+project files know where to find the header and lib files.  There
+should be a libusb top level directory, with include directly
+underneath it.
+
+3. Get the SDL2 library.  I used SDL2-2.0.4.zip.  Unpack it into your
+working directory.  Rename whatever version specific directory to just
+SDL2.  Make sure you wind up with an SDL2 directory with include
+directly underneath it.
+
+4. Build the SDL library.  Go to the VisualC subdirectory in your SDL2
+directory and open SDL.sln.  It will complain that you have opened a
+project from an unknown source, allow this.  It will also ask you to
+upgrade the project to the current version of Visual Studio, allow
+this as well.  Build Debug and Release for Win32 and x64. 
+
+5. Clone the github repository into your working directory. Open up
+Visual Studio and create a new project PS3EyeDriverMSVC in your
+working directory, checking the box that says "Create a Directory for
+the Solution".  Click Next at the first screen, and then in the
+Application Settings select the "Static Library" radio button.
+Uncheck the "Precompiled Headers" and Security Development Lifecycle
+checkboxes and hit "Finish"
+
+In the PS3EyeDriverMSVC project, Do "Add existing Item" to add
+"ps3eye.h" and "ps3eye_capi.h" from the PS3EyeDriver/src directory to
+the Header Files section.  Add "ps3eye.cpp" and "ps3eye_capi.c" to the
+Source Files section.
+
+Add libusb/include/libusb-1.0 from your working directory to the
+"Additional Include Directories" properties for the project.  Select
+"All Configurations" when you do this so it sets up both Debug and
+Release.
+
+You should be able to build both "Debug" and "Release" configurations
+now.  If you get errors, check your include paths.
+
+6. To test the driver, build the SDL example.  Right click the
+solution in the Solution explorer and do Add->New Project.  Name the
+project "SDLExample".  In the application settings, check the "Windows
+Application" checkbox, check "Empty Project" and uncheck "SDL Checks".
+Hit "Finish".
+
+Add main.cpp from PS3Eye/sdl to the Source Files for the SDLExample
+project.  Add libusb/include/libusb-1.0 from your working directory to
+the Additional Include Files for the SDLExample project. Also add
+SDL2/include and PS3Eye/src to the include files.
+
+Add "SDL2.lib;SDL2Main.lib;libusb-1.0.lib;" to the "Additional
+Dependencies" section of the Input linker properties for "All
+Configurations" of the SDLExample Project.  In "Additional Library
+Directories" for the "General" section of the project, add the
+libusb/MS32/static directory.
+
+The "Debug" and "Release" versions use different versions of the SDL
+library.  For the Debug build, add SDL2/VisualC/Win32/Debug to the
+library directories, and for the release build, add
+SDL2/Visualc/Win32/Release.
+
+Right click the SDLExample project and do "Set as Startup Project" so
+it gets run when you do "Debug->Start Debugging"
+
+Add a custom build event for all configurations of "copy
+..\..\SDL2\VisualC\$(Platform)\$(Configuration)\SDL2.dll $(OutDir)" to
+copy the proper version of the SDL2 dll into the output directory.
+
+You should be able to build Debug and Release for Win32 now.  If you
+get undefined symbol errors, check your file include paths.
+
+7. Before you can run the program you will have to install the usb
+driver for your PS3Eye camera.  I used zadig_2.2 to do this.  Other
+versions will probably work as well.  First, plug in your PS3Eye
+camera.  There are two devices, identically named, on the PS3Eye.  One
+is an audio device, and the other is the camera device.  You can't
+tell which is which in the device manager.  In windows 7, it found and
+installed a driver for the audio portion of the camera when I
+initially plugged in the camera, but couldn't find a driver for the
+video portion.  
+
+Next, run zadig. If zadig doesn't find your camera, it may already
+have a driver installed.  Click the "List all Devices" box in the
+"Options" menu.  Check the pull down box and you should see one (or
+maybe two, if you have "List all Devices" checked).  The device that
+worked for me was USB Camera-B4.09.24.1 (Interface 0).  If the audio
+driver is installed you will have usbaudio set to the current driver,
+so don't mess with this one.  Now pick a driver from the list and
+install it.  I had success so far with the WinUSB choice.
+
+8. Go back to your Visual Studio window and try running the SDL
+example program in Release or Debug mode, on the Win32 or x64
+platform.  You should see a window with the camera image pop up.  You
+can add options to the command line in the Debugging properties for
+the project.  To capture at 320x200, add --qvga to the command line.
+To run through all the modes one by one, use --mode_test.
+
+Notes:
+I only made the SDL example work.  I tried the cinder stuff, but it
+wouldn't build with the 0.9.0 version of cinder.  It also used a ciUI
+library which wouldn't build with anything other than the 0.8.4
+version of cinder, and VS2013 binaries weren't available for that
+version.
+
+The above procedure tests the 32 bit version of the driver.  To try
+the 64 bit version, make a new 64 bit platform, and change the libusb
+library include paths to libusb/m64/static and the SDL2 library
+include paths to SDL2/VisualC/x64 for that platform.
+
