@@ -173,6 +173,11 @@ public:
 	uint32_t getWidth() const { return frame_width; }
 	uint32_t getHeight() const { return frame_height; }
 	uint16_t getFrameRate() const { return frame_rate; }
+	bool setFrameRate(uint8_t val) {
+		if (is_streaming) return false;
+		frame_rate = ov534_set_frame_rate(val, true);
+		return true;
+	}
 	uint32_t getRowBytes() const { return frame_width * getOutputBytesPerPixel(); }
 	uint32_t getOutputBytesPerPixel() const;
 
