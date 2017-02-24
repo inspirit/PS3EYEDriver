@@ -53,7 +53,13 @@ void run_camera(int width, int height, int fps, Uint32 duration)
 	ctx.eye->setFlip(true); /* mirrored left-right */
 
 	char title[256];
+
+	// Get rid of annoying sprintf security warning in MSVC
+#ifdef _MSC_VER
+	sprintf_s(title, "%dx%d@%d\n", ctx.eye->getWidth(), ctx.eye->getHeight(), ctx.eye->getFrameRate());
+#else
 	sprintf(title, "%dx%d@%d\n", ctx.eye->getWidth(), ctx.eye->getHeight(), ctx.eye->getFrameRate());
+#endif
 
 	SDL_Window *window = SDL_CreateWindow(
 		title, SDL_WINDOWPOS_UNDEFINED,
