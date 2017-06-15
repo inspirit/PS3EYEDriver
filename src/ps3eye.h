@@ -1,3 +1,4 @@
+// source code from https://github.com/inspirit/PS3EYEDriver
 #ifndef PS3EYECAM_H
 #define PS3EYECAM_H
 
@@ -43,7 +44,8 @@ public:
 	{
 		Bayer,					// Output in Bayer. Destination buffer must be width * height bytes
 		BGR,					// Output in BGR. Destination buffer must be width * height * 3 bytes
-		RGB						// Output in RGB. Destination buffer must be width * height * 3 bytes
+		RGB	,					// Output in RGB. Destination buffer must be width * height * 3 bytes
+		Gray					// Output in Grayscale. Destination buffer must be width * height bytes
 	};
 
 	typedef std::shared_ptr<PS3EYECam> PS3EYERef;
