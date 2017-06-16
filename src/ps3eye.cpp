@@ -508,8 +508,6 @@ public:
 		available--;
 	}
 	
-#define HBT(x) (unsigned char)((x)>>8)
-
 	void DebayerGray(int frame_width, int frame_height, const uint8_t* inBayer, uint8_t* outBuffer)
 	{
 		// PSMove output is in the following Bayer format (GRBG):
