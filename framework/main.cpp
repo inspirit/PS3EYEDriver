@@ -226,6 +226,8 @@ int main(int argc, char * argv[])
 		framework.endDraw();
 	}
 	
+	mic.shut();
+	
 	if (eye != nullptr)
 	{
 		eye->stop();
