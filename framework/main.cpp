@@ -176,13 +176,20 @@ int main(int argc, char * argv[])
 	}
 #endif
 	
-	if (eye != nullptr && !eye->init(CAM_SX, CAM_SY, CAM_FPS,
-		CAM_GRAYSCALE
-		? PS3EYECam::EOutputFormat::Gray
-		: PS3EYECam::EOutputFormat::RGB))
-		errorString = "failed to initialize PS3 eye camera";
-	else
-		eye->start();
+	if (eye != nullptr)
+	{
+		if (!eye->init(CAM_SX, CAM_SY, CAM_FPS,
+			CAM_GRAYSCALE
+			? PS3EYECam::EOutputFormat::Gray
+			: PS3EYECam::EOutputFormat::RGB))
+		{
+			errorString = "failed to initialize PS3 eye camera";
+		}
+		else
+		{
+			eye->start();
+		}
+	}
 	
 	PS3EYEMic mic;
 	MyAudioCallback audioCallback(AUDIO_HISTORY_LENGTH);
@@ -206,7 +213,7 @@ int main(int argc, char * argv[])
 		if (keyboard.wentDown(SDLK_ESCAPE))
 			framework.quitRequested = true;
 		
-		if (eye->isStreaming())
+		if (eye != nullptr && eye->isStreaming())
 		{
 			eye->getFrame(imageData);
 			
