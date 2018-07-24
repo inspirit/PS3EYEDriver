@@ -100,18 +100,18 @@ static void drawAudioHistory(const MyAudioCallback & audioCallback)
 			{
 				for (int i = audioCallback.firstHistoryFrame, n = 0; n + 1 < audioCallback.maxHistoryFrames; ++n)
 				{
-					const float value1 = history[i + 0];
-					const float value2 = history[i + 1];
+					const int index1 = i;
+					const int index2 = i + 1 == audioCallback.maxHistoryFrames ? 0 : i + 1;
+					
+					const float value1 = history[index1];
+					const float value2 = history[index2];
 					const float strokeSize = .4f;
 					
 					hqLine(n + 0, value1, strokeSize, n + 1, value2, strokeSize);
 					
 					//
 					
-					i++;
-					
-					if (i == audioCallback.maxHistoryFrames)
-						i = 0;
+					i = index2;
 				}
 			}
 			hqEnd();
