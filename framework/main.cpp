@@ -4,9 +4,15 @@
 
 #define CAM_SX 640
 #define CAM_SY 480
-#define CAM_FPS 60
+#define CAM_FPS 60 // Frames per second. At 320x240 this can go as high as 187 fps.
 
-#define CAM_GRAYSCALE true
+#define CAM_GRAYSCALE false // If true the camera will output a grayscale image instead of rgb color.
+
+#define DO_SUM true // Calculates and draws the sum of all four microphones. The effect of this is that the summed channel amplifies sounds coming from the front, while reducing ambient noise and sounds coming from the sides. Try it out by making hissing sounds from different directions towards the camera!
+
+#define NUM_CHANNELS (DO_SUM ? 5 : 4) // The number of channels to record. Normally this would be four, but when DO_SUM is enabled, this becomes five.
+
+#define AUDIO_HISTORY_LENGTH .5f // Length of the audio history buffer in seconds.
 
 using namespace ps3eye;
 
@@ -16,7 +22,7 @@ static uint8_t imageData[CAM_SX * CAM_SY * 3];
 
 struct MyAudioCallback : AudioCallback
 {
-	std::vector<float> histories[4];
+	std::vector<float> histories[NUM_CHANNELS];
 	int maxHistoryFrames = 0;
 	int numHistoryFrames = 0;
 	int firstHistoryFrame = 0;
@@ -25,7 +31,7 @@ struct MyAudioCallback : AudioCallback
 	{
 		maxHistoryFrames = seconds * PS3EYEMic::kSampleRate;
 		
-		for (int i = 0; i < 4; ++i)
+		for (int i = 0; i < NUM_CHANNELS; ++i)
 		{
 			histories[i].resize(maxHistoryFrames, 0.f);
 		}
@@ -46,6 +52,16 @@ struct MyAudioCallback : AudioCallback
 				history[firstHistoryFrame] = value;
 			}
 			
+		#if DO_SUM
+			histories[4][firstHistoryFrame] =
+				(
+					histories[0][firstHistoryFrame] +
+					histories[1][firstHistoryFrame] +
+					histories[2][firstHistoryFrame] +
+					histories[3][firstHistoryFrame]
+				) / 4.f;
+		#endif
+			
 			if (numHistoryFrames < maxHistoryFrames)
 				numHistoryFrames++;
 			
@@ -61,21 +77,22 @@ static void drawAudioHistory(const MyAudioCallback & audioCallback)
 {
 	gxScalef(CAM_SX / float(audioCallback.maxHistoryFrames - 1), CAM_SY, 1.f);
 
-	for (int c = 0; c < 4; ++c)
+	for (int c = 0; c < NUM_CHANNELS; ++c)
 	{
 		auto & history = audioCallback.histories[c];
 		
 		gxPushMatrix();
 		{
-			gxTranslatef(0, (c + 1) / 5.f, 0);
-			gxScalef(1, 1 / 4.f, 1);
+			gxTranslatef(0, (c + 1.f) / (NUM_CHANNELS + 1), 0);
+			gxScalef(1, 1.f / NUM_CHANNELS, 1);
 			
-			const Color colors[4] =
+			const Color colors[NUM_CHANNELS] =
 			{
 				colorRed,
 				colorGreen,
 				colorBlue,
-				colorYellow
+				colorYellow,
+				colorWhite
 			};
 			
 			setColor(colors[c]);
@@ -102,6 +119,8 @@ static void drawAudioHistory(const MyAudioCallback & audioCallback)
 		gxPopMatrix();
 	}
 }
+
+#if 0 // todo : remove
 
 static void testAudioStreaming(PS3EYECam * eye)
 {
@@ -130,6 +149,8 @@ static void testAudioStreaming(PS3EYECam * eye)
 	}
 }
 
+#endif
+
 int main(int argc, char * argv[])
 {
 	if (!framework.init(0, nullptr, 640, 480))
@@ -147,11 +168,13 @@ int main(int argc, char * argv[])
 		eye = devices[0];
 	
 	devices.clear();
-	
+
+#if 0 // todo : remove
 	if (eye != nullptr)
 	{
-		//testAudioStreaming(eye.get());
+		testAudioStreaming(eye.get());
 	}
+#endif
 	
 	if (eye != nullptr && !eye->init(CAM_SX, CAM_SY, CAM_FPS,
 		CAM_GRAYSCALE
@@ -162,7 +185,7 @@ int main(int argc, char * argv[])
 		eye->start();
 	
 	PS3EYEMic mic;
-	MyAudioCallback audioCallback(.5f);
+	MyAudioCallback audioCallback(AUDIO_HISTORY_LENGTH);
 	
 	if (eye != nullptr)
 	{
