@@ -2,12 +2,8 @@
 #ifndef PS3EYECAM_H
 #define PS3EYECAM_H
 
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <vector>
-
 #include <memory>
+#include <vector>
 
 struct libusb_device;
 struct libusb_device_handle;

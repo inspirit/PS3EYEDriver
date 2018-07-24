@@ -18,6 +18,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
+#include <vector>
 
 #if defined WIN32 || defined _WIN32 || defined WINCE
 	#include <windows.h>
