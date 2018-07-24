@@ -25,17 +25,17 @@ struct PS3EYEMic
 	
 	std::vector<libusb_transfer*> transfers;
 	std::atomic<int> numActiveTransfers;
+	std::atomic<bool> cancelTransfers;
 
 	PS3EYEMic();
 	~PS3EYEMic();
 
 	bool init(libusb_device * device, AudioCallback * audioCallback);
+	bool initImpl(libusb_device * device, AudioCallback * audioCallback);
 	void shut();
 
 	bool beginTransfers(const int packetSize, const int numPackets, const int numTransfers);
 	void cancelTransfersBegin();
 	void cancelTransfersWait();
 	void freeTransfers();
-	
-	void poll();
 };

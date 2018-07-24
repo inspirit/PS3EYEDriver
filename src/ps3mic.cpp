@@ -1,10 +1,9 @@
 #include "ps3eye.h" // for vendor and product IDs
 #include "ps3mic.h"
-
 #include "libusb.h"
-
 #include <assert.h>
-#include <stdio.h>
+
+#include <unistd.h> // todo : remove. only here for usleep
 
 /*
 
@@ -21,6 +20,7 @@ only has one capsule.
 */
 
 #if defined(DEBUG)
+	#include <stdio.h>
 	#define debug(...) do { fprintf(stdout, __VA_ARGS__); fprintf(stdout, "\n"); } while (false)
 #else
 	#define debug(...)
@@ -54,6 +54,8 @@ static void handleTransfer(struct libusb_transfer * transfer)
 {
 	PS3EYEMic * mic = (PS3EYEMic*)transfer->user_data;
 	
+	assert(mic->numActiveTransfers > 0);
+	
 	for (int i = 0; i < transfer->num_iso_packets; ++i)
 	{
 		libusb_iso_packet_descriptor & packet = transfer->iso_packet_desc[i];
@@ -78,16 +80,33 @@ static void handleTransfer(struct libusb_transfer * transfer)
 		}
 	}
 	
-	const int res = libusb_submit_transfer(transfer);
-	
-	if (res < 0)
+	if (mic->cancelTransfers)
 	{
-		debug("failed to submit transfer: %d: %s", res, libusb_error_name(res));
+		// todo : check return value
+		
+		const int res = libusb_cancel_transfer(transfer);
+		
+		if (res < 0)
+		{
+			debug("failed to cancel transfer: %d: %s", res, libusb_error_name(res));
+		}
+		
+		mic->numActiveTransfers--;
+	}
+	else
+	{
+		const int res = libusb_submit_transfer(transfer);
+		
+		if (res < 0)
+		{
+			debug("failed to submit transfer: %d: %s", res, libusb_error_name(res));
+		}
 	}
 }
 
 PS3EYEMic::PS3EYEMic()
 	: numActiveTransfers(0)
+	, cancelTransfers(false)
 {
 }
 
@@ -95,13 +114,26 @@ PS3EYEMic::~PS3EYEMic()
 {
 }
 
-bool PS3EYEMic::init(libusb_device * _device, AudioCallback * _audioCallback)
+bool PS3EYEMic::init(libusb_device * device, AudioCallback * audioCallback)
+{
+	auto result = initImpl(device, audioCallback);
+	
+	if (!result)
+		shut();
+	
+	return result;
+}
+
+bool PS3EYEMic::initImpl(libusb_device * _device, AudioCallback * _audioCallback)
 {
 	assert(device == nullptr);
 	assert(audioCallback == nullptr);
 
 	device = _device;
 	audioCallback = _audioCallback;
+	
+	assert(device != nullptr);
+	assert(audioCallback != nullptr);
 
 	// open the USB device
 
@@ -151,19 +183,55 @@ bool PS3EYEMic::init(libusb_device * _device, AudioCallback * _audioCallback)
         return false;
 	}
 	
+	//
+	
+	micStarted();
+	
+	//
+	
 	if (!beginTransfers(PACKET_SIZE, NUM_PACKETS, NUM_TRANSFERS))
 	{
 		return false;
 	}
-	
-	micStarted();
 
 	return true;
 }
 
 void PS3EYEMic::shut()
 {
+	if (numActiveTransfers > 0)
+	{
+		cancelTransfersBegin();
+		
+		cancelTransfersWait();
+	}
+	
+	freeTransfers();
+	
+	//
+	
 	micStopped();
+	
+	//
+	
+	if (deviceHandle != nullptr)
+	{
+		int res = libusb_release_interface(deviceHandle, INTERFACE_NUMBER);
+		if (res < 0)
+			debug("failed to release interface. %d: %s", res, libusb_error_name(res));
+		
+		res = libusb_attach_kernel_driver(deviceHandle, INTERFACE_NUMBER);
+		if (res < 0)
+			debug("failed to attack kernel driver for interface. %d: %s", res, libusb_error_name(res));
+		
+		libusb_close(deviceHandle);
+		deviceHandle = nullptr;
+	}
+	
+	//
+	
+	device = nullptr;
+	audioCallback = nullptr;
 }
 
 bool PS3EYEMic::beginTransfers(const int packetSize, const int numPackets, const int numTransfers)
@@ -202,6 +270,7 @@ bool PS3EYEMic::beginTransfers(const int packetSize, const int numPackets, const
 			handleTransfer,
 			this,
 			1000);
+		
 		libusb_set_iso_packet_lengths(transfer, packetSize);
 		
 		const int res = libusb_submit_transfer(transfer);
@@ -220,15 +289,31 @@ bool PS3EYEMic::beginTransfers(const int packetSize, const int numPackets, const
 
 void PS3EYEMic::cancelTransfersBegin()
 {
-
+	cancelTransfers = true;
 }
 
 void PS3EYEMic::cancelTransfersWait()
 {
-
+	// todo : use notify system similar to PS3EYECam
+	
+	while (numActiveTransfers != 0)
+	{
+		usleep(100);
+	}
 }
 
 void PS3EYEMic::freeTransfers()
 {
-
+	for (auto & transfer : transfers)
+	{
+		libusb_free_transfer(transfer);
+		transfer = nullptr;
+	}
+	
+	transfers.clear();
+	
+	//
+	
+	delete [] transferData;
+	transferData = nullptr;
 }
