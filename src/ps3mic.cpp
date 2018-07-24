@@ -28,7 +28,7 @@ only has one capsule.
 
 #define INTERFACE_NUMBER 2
 
-#define ISO_ENDPOINT 0x84
+#define ISO_ENDPOINT_ADDRESS 0x84
 
 // for streaming we set up a bunch of transfers, which will each transfer a number of packets of a certain size
 // I have no idea what the ideal values are here.. I guess there's a sweet spot between still having robust transfers
@@ -55,7 +55,7 @@ static void handleTransfer(struct libusb_transfer * transfer)
 	
 	for (int i = 0; i < transfer->num_iso_packets; ++i)
 	{
-		libusb_iso_packet_descriptor & packet = transfer->iso_packet_desc[i];
+		const libusb_iso_packet_descriptor & packet = transfer->iso_packet_desc[i];
 	
 		if (packet.status != LIBUSB_TRANSFER_COMPLETED)
 		{
@@ -104,9 +104,9 @@ PS3EYEMic::~PS3EYEMic()
 
 bool PS3EYEMic::init(libusb_device * device, AudioCallback * audioCallback)
 {
-	auto result = initImpl(device, audioCallback);
+	const bool result = initImpl(device, audioCallback);
 	
-	if (!result)
+	if (result == false)
 		shut();
 	
 	return result;
@@ -125,15 +125,17 @@ bool PS3EYEMic::initImpl(libusb_device * _device, AudioCallback * _audioCallback
 
 	// open the USB device
 
-	int res = libusb_open(device, &deviceHandle);
-	if (res != 0)
+	int res;
+	
+	res = libusb_open(device, &deviceHandle);
+	if (res != LIBUSB_SUCCESS)
 	{
 		debug("device open error: %d: %s", res, libusb_error_name(res));
 		return false;
 	}
 
 	res = libusb_set_configuration(deviceHandle, 1);
-	if (res != 0)
+	if (res != LIBUSB_SUCCESS)
 	{
 		debug("failed to set device configuration: %d: %s", res, libusb_error_name(res));
 		return false;
@@ -144,7 +146,7 @@ bool PS3EYEMic::initImpl(libusb_device * _device, AudioCallback * _audioCallback
     if (libusb_kernel_driver_active(deviceHandle, INTERFACE_NUMBER))
     {
         res = libusb_detach_kernel_driver(deviceHandle, INTERFACE_NUMBER);
-        if (res < 0)
+        if (res != LIBUSB_SUCCESS)
         {
             debug("failed to detach kernel driver: %d: %s", res, libusb_error_name(res));
             return false;
@@ -154,7 +156,7 @@ bool PS3EYEMic::initImpl(libusb_device * _device, AudioCallback * _audioCallback
 	// claim interface
 
 	res = libusb_claim_interface(deviceHandle, INTERFACE_NUMBER);
-	if (res < 0)
+	if (res != LIBUSB_SUCCESS)
 	{
 		// todo : on Macos and Windows : suggest to unload kernel driver when interface claim fails
 
@@ -165,7 +167,7 @@ bool PS3EYEMic::initImpl(libusb_device * _device, AudioCallback * _audioCallback
     // set the interface alt mode. 1 = (multi-channel) mono
 
 	res = libusb_set_interface_alt_setting(deviceHandle, INTERFACE_NUMBER, 1);
-	if (res < 0)
+	if (res != LIBUSB_SUCCESS)
 	{
 		debug("failed to set interface alt setting: %d: %sn", res, libusb_error_name(res));
         return false;
@@ -174,6 +176,7 @@ bool PS3EYEMic::initImpl(libusb_device * _device, AudioCallback * _audioCallback
 	//
 	
 	micStarted();
+	started = true;
 	
 	//
 	
@@ -198,18 +201,22 @@ void PS3EYEMic::shut()
 	
 	//
 	
-	micStopped();
+	if (started)
+	{
+		micStopped();
+		started = false;
+	}
 	
 	//
 	
 	if (deviceHandle != nullptr)
 	{
 		int res = libusb_release_interface(deviceHandle, INTERFACE_NUMBER);
-		if (res < 0)
+		if (res != LIBUSB_SUCCESS)
 			debug("failed to release interface. %d: %s", res, libusb_error_name(res));
 		
 		res = libusb_attach_kernel_driver(deviceHandle, INTERFACE_NUMBER);
-		if (res < 0)
+		if (res != LIBUSB_SUCCESS)
 			debug("failed to attach kernel driver for interface. %d: %s", res, libusb_error_name(res));
 		
 		libusb_close(deviceHandle);
@@ -251,7 +258,7 @@ bool PS3EYEMic::beginTransfers(const int packetSize, const int numPackets, const
 		libusb_fill_iso_transfer(
 			transfer,
 			deviceHandle,
-			ISO_ENDPOINT,
+			ISO_ENDPOINT_ADDRESS,
 			transferData,
 			transferSize,
 			numPackets,
@@ -263,7 +270,7 @@ bool PS3EYEMic::beginTransfers(const int packetSize, const int numPackets, const
 		
 		const int res = libusb_submit_transfer(transfer);
 		
-		if (res < 0)
+		if (res != LIBUSB_SUCCESS)
 		{
 			debug("failed to submit transfer. %d: %s", res, libusb_error_name(res));
 			return false;

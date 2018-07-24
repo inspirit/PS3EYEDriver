@@ -15,6 +15,14 @@ If you want to support my efforts building a new creative coding library,
 an audio-visual patching system, tutorials and examples and ofcourse
 projects like these, please become a patron. :-)
 
+todo :
+
+- 48kHz sampling rate
+	Marketing materials, Wikipedia etc all consistently say the PS3 Eye camera supports a 48kHz sampling rate. However, the USB audio class descriptor only mentions support for up to 16kHz, and this is what I get. Perhaps it's possible to switch modes? There's a mysterious vendor specific interface in the USB interface descriptor list. Perhaps this is the key?
+
+- Combine PS3 eye camera feed with microphone array input
+	This should be trivial to accomplish once all of the building blocks are in place.
+
 */
 
 #pragma once
@@ -44,6 +52,7 @@ struct PS3EYEMic
 {
 	libusb_device * device = nullptr;
 	libusb_device_handle * deviceHandle = nullptr;
+	bool started = false;
 
 	AudioCallback * audioCallback = nullptr;
 	
@@ -56,9 +65,9 @@ struct PS3EYEMic
 	PS3EYEMic();
 	~PS3EYEMic();
 
-	bool init(libusb_device * device, AudioCallback * audioCallback);
+	bool init(libusb_device * device, AudioCallback * audioCallback); // Initialize and begin capturing microphone data
 	bool initImpl(libusb_device * device, AudioCallback * audioCallback);
-	void shut();
+	void shut(); // End capturing microphone data and shutdown
 
 	bool beginTransfers(const int packetSize, const int numPackets, const int numTransfers);
 	void endTransfersBegin();
