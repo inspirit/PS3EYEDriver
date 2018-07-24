@@ -35,7 +35,7 @@ For streaming we set up a bunch of transfers, which will each transfer a number 
 
 todo : find good values for these numbers
 */
-static const int PACKET_SIZE = 256;
+static const int PACKET_SIZE = 512;
 static const int NUM_PACKETS = 2;
 static const int NUM_TRANSFERS = 2;
 
@@ -178,7 +178,14 @@ bool PS3EYEMic::initImpl(libusb_device * _device, AudioCallback * _audioCallback
 	res = libusb_claim_interface(deviceHandle, INTERFACE_NUMBER);
 	if (res != LIBUSB_SUCCESS)
 	{
-		// todo : on Macos and Windows : suggest to unload kernel driver when interface claim fails
+	#ifdef __APPLE__
+		printf(
+			"-- Failed to claim interface. On Macos this may be due to the OS already having loaded the Apple USB Audio kernel driver for your Eye camera. LibUSB cannot unload this driver for us, so you'll have to run the following command from the terminal to unload it manually. Note this will kill audio to/from ALL USB audio devices!!:\n"
+			"sudo kextunload -b com.apple.driver.AppleUSBAudio\n"
+			"--\n"
+			);
+	#endif
+		// todo : add Windows help text here in case claiming the interface fails
 
 		debugMessage("failed to claim interface: %d: %s", res, libusb_error_name(res));
         return false;
@@ -272,8 +279,6 @@ bool PS3EYEMic::beginTransfers(const int packetSize, const int numPackets, const
 			debugMessage("failed to allocate transfer");
 			return false;
 		}
-		
-		// todo : check result codes
 		
 		libusb_fill_iso_transfer(
 			transfer,
