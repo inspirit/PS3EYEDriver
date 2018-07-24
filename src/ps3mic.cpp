@@ -40,13 +40,10 @@ only has one capsule.
 
 //
 
-namespace ps3eye
-{
-	extern void micStarted();
-	extern void micStopped();
-}
+namespace ps3eye {
 
-using namespace ps3eye;
+extern void micStarted();
+extern void micStopped();
 
 //
 
@@ -74,7 +71,7 @@ static void handleTransfer(struct libusb_transfer * transfer)
 		
 		if (numFrames > 0)
 		{
-			const int16_t * frames = (int16_t*)libusb_get_iso_packet_buffer_simple(transfer, i);
+			const AudioFrame * frames = (AudioFrame*)libusb_get_iso_packet_buffer_simple(transfer, i);
 			
 			mic->audioCallback->handleAudioData(frames, numFrames);
 		}
@@ -309,4 +306,6 @@ void PS3EYEMic::freeTransfers()
 	
 	delete [] transferData;
 	transferData = nullptr;
+}
+
 }
