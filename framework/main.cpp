@@ -14,31 +14,47 @@ static std::string errorString;
 
 static uint8_t imageData[CAM_SX * CAM_SY * 3];
 
-struct MyAudioCallback : PS3EYEMic::AudioCallback
+struct MyAudioCallback : AudioCallback
 {
-	std::vector<float> history;
+	std::vector<float> histories[4];
 	
-	virtual void handleAudioData(const int16_t * frames, const int numFrames) override
+	MyAudioCallback(const float seconds)
+	{
+		const int numFramesToExpect = seconds * 16000;
+		const int numFramesToReserve = numFramesToExpect * 110 / 100;
+		
+		for (int i = 0; i < 4; ++i)
+			histories[i].reserve(numFramesToReserve);
+	}
+	
+	virtual void handleAudioData(const AudioFrame * frames, const int numFrames) override
 	{
 		//printf("received %d frames!\n", numFrames);
 		
-		for (int i = 0; i < numFrames; ++i)
+		for (int c = 0; c < 4; ++c)
 		{
-			const float value = frames[i * 4 + 0] / float(1 << 15);
+			auto & history = histories[c];
 			
-			history.push_back(value);
+			for (int i = 0; i < numFrames; ++i)
+			{
+				const float value = frames[i].channel[0] / float(1 << 15);
+				
+				history.push_back(value);
+			}
 		}
 	}
 };
 
 static void testAudioStreaming(PS3EYECam * eye)
 {
+	const int numSeconds = 10;
+	
 	PS3EYEMic mic;
-	MyAudioCallback audioCallback;
+	MyAudioCallback audioCallback(numSeconds);
 	
 	if (mic.init(eye->getDevice(), &audioCallback))
 	{
-		const auto endTime = SDL_GetTicks() + 10000;
+		const auto endTime = SDL_GetTicks() + numSeconds * 1000;
 		
 		while (SDL_GetTicks() < endTime && !keyboard.wentDown(SDLK_SPACE))
 		{
@@ -46,22 +62,49 @@ static void testAudioStreaming(PS3EYECam * eye)
 			
 			framework.beginDraw(0, 0, 0, 0);
 			{
-				if (audioCallback.history.size() < 2)
+				auto & baseHistory = audioCallback.histories[0];
+				
+				if (baseHistory.size() < 2)
 					continue;
 				
-				gxScalef(CAM_SX / float(audioCallback.history.size() - 1), CAM_SY / 2.f, 1.f);
-				gxTranslatef(0, 1, 0);
+				const int numLines = std::min((int)baseHistory.size(), 16000 * 2/3);
+				const int offset = baseHistory.size() - numLines;
 				
-				setColor(colorWhite);
-				hqBegin(HQ_LINES, true);
-				for (int i = 0; i + 1 < audioCallback.history.size(); ++i)
+				gxScalef(CAM_SX / float(numLines - 1), CAM_SY, 1.f);
+				
+				for (int c = 0; c < 4; ++c)
 				{
-					const float value1 = audioCallback.history[i + 0];
-					const float value2 = audioCallback.history[i + 1];
+					auto & history = audioCallback.histories[c];
 					
-					hqLine(i + 0, value1, .4f, i + 1, value2, .4f);
+					gxPushMatrix();
+					{
+						gxTranslatef(0, (c + 1) / 5.f, 0);
+						gxScalef(1, 1 / 4.f, 1);
+						
+						const Color colors[4] =
+						{
+							colorRed,
+							colorGreen,
+							colorBlue,
+							colorYellow
+						};
+						
+						setColor(colors[c]);
+						hqBegin(HQ_LINES, true);
+						{
+							for (int i = 0; i + 1 < numLines; ++i)
+							{
+								const float value1 = history[i + offset + 0];
+								const float value2 = history[i + offset + 1];
+								const float strokeSize = .4f;
+								
+								hqLine(i + 0, value1, strokeSize, i + 1, value2, strokeSize);
+							}
+						}
+						hqEnd();
+					}
+					gxPopMatrix();
 				}
-				hqEnd();
 			}
 			framework.endDraw();
 		}
