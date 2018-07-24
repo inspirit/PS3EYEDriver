@@ -1,10 +1,24 @@
 // source code from https://github.com/inspirit/PS3EYEDriver
 #include "ps3eye.h"
 
+// Get rid of annoying zero length structure warnings from libusb.h in MSVC
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4200)
+#endif
+
+#include "libusb.h"
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
+#include <vector>
 
 #if defined WIN32 || defined _WIN32 || defined WINCE
 	#include <windows.h>
@@ -68,6 +82,12 @@
 #ifdef _MSC_VER
 #pragma warning (disable: 4996) // 'This function or variable may be unsafe': snprintf
 #define snprintf _snprintf
+#endif
+
+#if defined(DEBUG) && 0
+#define debug(...) fprintf(stdout, __VA_ARGS__)
+#else
+#define debug(...)
 #endif
 
 namespace ps3eye {
@@ -801,6 +821,13 @@ public:
 		// Wait for cancelation to finish
 		num_active_transfers_condition.wait(lock, [this]() { return num_active_transfers == 0; });
 
+		// Free completed transfers
+		for (int index = 0; index < NUM_TRANSFERS; ++index)
+		{
+			libusb_free_transfer(xfr[index]);
+			xfr[index] = nullptr;
+		}
+		
 		USBMgr::instance()->cameraStopped();
 
 		free(transfer_buffer);
@@ -960,8 +987,7 @@ static void LIBUSB_CALL transfer_completed_callback(struct libusb_transfer *xfr)
     if (status != LIBUSB_TRANSFER_COMPLETED) 
     {
         debug("transfer status %d\n", status);
-
-        libusb_free_transfer(xfr);
+        
 		urb->transfer_canceled();
         
         if(status != LIBUSB_TRANSFER_CANCELLED)
@@ -1228,6 +1254,10 @@ bool PS3EYECam::open_usb()
 		return false;
 	}
 
+	// Linux has a kernel module for the PS3 eye camera (that's where most of the code in here comes from..)
+	// so we must detach the driver before we can hook up with the eye ourselves
+	libusb_detach_kernel_driver(handle_, 0);
+
 	//libusb_set_configuration(handle_, 0);
 
 	res = libusb_claim_interface(handle_, 0);
@@ -1243,6 +1273,7 @@ void PS3EYECam::close_usb()
 {
 	debug("closing device\n");
 	libusb_release_interface(handle_, 0);
+	libusb_attach_kernel_driver(handle_, 0);
 	libusb_close(handle_);
 	libusb_unref_device(device_);
 	handle_ = NULL;
