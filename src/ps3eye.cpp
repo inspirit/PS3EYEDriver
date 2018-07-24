@@ -1,6 +1,19 @@
 // source code from https://github.com/inspirit/PS3EYEDriver
 #include "ps3eye.h"
 
+// Get rid of annoying zero length structure warnings from libusb.h in MSVC
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4200)
+#endif
+
+#include "libusb.h"
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+
 #include <thread>
 #include <mutex>
 #include <condition_variable>
