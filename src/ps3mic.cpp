@@ -3,8 +3,6 @@
 #include "libusb.h"
 #include <assert.h>
 
-#include <unistd.h> // todo : remove. only here for usleep
-
 /*
 
 The PS3 eye camera exposes its microphone array as a regular USB audio device with four channels
@@ -37,7 +35,7 @@ For streaming we set up a bunch of transfers, which will each transfer a number 
 
 todo : find good values for these numbers
 */
-static const int PACKET_SIZE = 128;
+static const int PACKET_SIZE = 256;
 static const int NUM_PACKETS = 2;
 static const int NUM_TRANSFERS = 2;
 
@@ -54,48 +52,69 @@ static void handleTransfer(struct libusb_transfer * transfer)
 	
 	assert(mic->numActiveTransfers > 0);
 	
-	for (int i = 0; i < transfer->num_iso_packets; ++i)
-	{
-		const libusb_iso_packet_descriptor & packet = transfer->iso_packet_desc[i];
-	
-		if (packet.status != LIBUSB_TRANSFER_COMPLETED)
-		{
-			debugMessage("packet status != LIBUSB_TRANSFER_COMPLETED");
-			continue;
-		}
-		
-		const int frameSize = 4 * sizeof(int16_t);
-		
-		const int numBytes = packet.actual_length;
-		assert((numBytes % frameSize) == 0);
-		const int numFrames = numBytes / frameSize;
-		
-		if (numFrames > 0)
-		{
-			const AudioFrame * frames = (AudioFrame*)libusb_get_iso_packet_buffer_simple(transfer, i);
-			
-			mic->audioCallback->handleAudioData(frames, numFrames);
-		}
-	}
+	bool endTransfer = false;
 	
 	if (mic->endTransfers)
 	{
-		mic->numActiveTransfers--;
+		endTransfer = true;
 	}
-	else
+	else if (transfer->status == LIBUSB_TRANSFER_COMPLETED)
 	{
+		for (int i = 0; i < transfer->num_iso_packets; ++i)
+		{
+			const libusb_iso_packet_descriptor & packet = transfer->iso_packet_desc[i];
+		
+			if (packet.status != LIBUSB_TRANSFER_COMPLETED)
+			{
+				debugMessage("packet status != LIBUSB_TRANSFER_COMPLETED");
+				continue;
+			}
+			
+			const int frameSize = 4 * sizeof(int16_t);
+			
+			const int numBytes = packet.actual_length;
+			assert((numBytes % frameSize) == 0);
+			const int numFrames = numBytes / frameSize;
+			
+			if (numFrames > 0)
+			{
+				const AudioFrame * frames = (AudioFrame*)libusb_get_iso_packet_buffer_simple(transfer, i);
+				
+				mic->audioCallback->handleAudioData(frames, numFrames);
+			}
+		}
+		
 		const int res = libusb_submit_transfer(transfer);
 		
 		if (res < 0)
 		{
 			debugMessage("failed to submit transfer: %d: %s", res, libusb_error_name(res));
+			endTransfer = true;
 		}
+	}
+	else
+	{
+		debugMessage("transfer ended but status is not COMPLETED: status=%d", transfer->status);
+		
+		const int res = libusb_submit_transfer(transfer);
+		
+		if (res < 0)
+		{
+			debugMessage("failed to submit transfer: %d: %s", res, libusb_error_name(res));
+			endTransfer = true;
+		}
+	}
+	
+	if (endTransfer)
+	{
+		std::unique_lock<std::mutex> lock(mic->numActiveTransfersMutex);
+		mic->numActiveTransfers--;
+		mic->numActiveTransfersCondition.notify_one();
 	}
 }
 
 PS3EYEMic::PS3EYEMic()
-	: numActiveTransfers(0)
-	, endTransfers(false)
+	: endTransfers(false)
 {
 }
 
@@ -277,6 +296,7 @@ bool PS3EYEMic::beginTransfers(const int packetSize, const int numPackets, const
 			return false;
 		}
 		
+		std::unique_lock<std::mutex> lock(numActiveTransfersMutex);
 		numActiveTransfers++;
 	}
 	
@@ -290,12 +310,8 @@ void PS3EYEMic::endTransfersBegin()
 
 void PS3EYEMic::endTransfersWait()
 {
-	// todo : use notify system similar to PS3EYECam
-	
-	while (numActiveTransfers != 0)
-	{
-		usleep(100);
-	}
+	std::unique_lock<std::mutex> lock(numActiveTransfersMutex);
+	numActiveTransfersCondition.wait(lock, [this]() { return numActiveTransfers == 0; });
 	
 	endTransfers = false;
 }

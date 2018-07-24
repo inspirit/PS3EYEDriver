@@ -28,6 +28,8 @@ todo :
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <vector>
 
 struct libusb_device;
@@ -59,7 +61,9 @@ struct PS3EYEMic
 	uint8_t * transferData = nullptr;
 	
 	std::vector<libusb_transfer*> transfers;
-	std::atomic<int> numActiveTransfers;
+	int numActiveTransfers = 0;
+	std::mutex numActiveTransfersMutex;
+	std::condition_variable numActiveTransfersCondition;
 	std::atomic<bool> endTransfers;
 
 	PS3EYEMic();
