@@ -25,7 +25,7 @@ struct PS3EYEMic
 	
 	std::vector<libusb_transfer*> transfers;
 	std::atomic<int> numActiveTransfers;
-	std::atomic<bool> cancelTransfers;
+	std::atomic<bool> endTransfers;
 
 	PS3EYEMic();
 	~PS3EYEMic();
@@ -35,7 +35,7 @@ struct PS3EYEMic
 	void shut();
 
 	bool beginTransfers(const int packetSize, const int numPackets, const int numTransfers);
-	void cancelTransfersBegin();
-	void cancelTransfersWait();
+	void endTransfersBegin();
+	void endTransfersWait();
 	void freeTransfers();
 };

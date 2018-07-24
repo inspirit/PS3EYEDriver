@@ -80,17 +80,8 @@ static void handleTransfer(struct libusb_transfer * transfer)
 		}
 	}
 	
-	if (mic->cancelTransfers)
+	if (mic->endTransfers)
 	{
-		// todo : check return value
-		
-		const int res = libusb_cancel_transfer(transfer);
-		
-		if (res < 0)
-		{
-			debug("failed to cancel transfer: %d: %s", res, libusb_error_name(res));
-		}
-		
 		mic->numActiveTransfers--;
 	}
 	else
@@ -106,7 +97,7 @@ static void handleTransfer(struct libusb_transfer * transfer)
 
 PS3EYEMic::PS3EYEMic()
 	: numActiveTransfers(0)
-	, cancelTransfers(false)
+	, endTransfers(false)
 {
 }
 
@@ -201,9 +192,9 @@ void PS3EYEMic::shut()
 {
 	if (numActiveTransfers > 0)
 	{
-		cancelTransfersBegin();
+		endTransfersBegin();
 		
-		cancelTransfersWait();
+		endTransfersWait();
 	}
 	
 	freeTransfers();
@@ -222,7 +213,7 @@ void PS3EYEMic::shut()
 		
 		res = libusb_attach_kernel_driver(deviceHandle, INTERFACE_NUMBER);
 		if (res < 0)
-			debug("failed to attack kernel driver for interface. %d: %s", res, libusb_error_name(res));
+			debug("failed to attach kernel driver for interface. %d: %s", res, libusb_error_name(res));
 		
 		libusb_close(deviceHandle);
 		deviceHandle = nullptr;
@@ -287,12 +278,12 @@ bool PS3EYEMic::beginTransfers(const int packetSize, const int numPackets, const
 	return true;
 }
 
-void PS3EYEMic::cancelTransfersBegin()
+void PS3EYEMic::endTransfersBegin()
 {
-	cancelTransfers = true;
+	endTransfers = true;
 }
 
-void PS3EYEMic::cancelTransfersWait()
+void PS3EYEMic::endTransfersWait()
 {
 	// todo : use notify system similar to PS3EYECam
 	
@@ -300,6 +291,8 @@ void PS3EYEMic::cancelTransfersWait()
 	{
 		usleep(100);
 	}
+	
+	endTransfers = false;
 }
 
 void PS3EYEMic::freeTransfers()
