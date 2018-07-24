@@ -1,5 +1,6 @@
 #include "framework.h"
 #include "ps3eye.h"
+#include "ps3mic.h"
 
 #define CAM_SX 640
 #define CAM_SY 480
@@ -10,6 +11,27 @@ using namespace ps3eye;
 static std::string errorString;
 
 static uint8_t imageData[CAM_SX * CAM_SY * 3];
+
+struct MyAudioCallback : PS3EYEMic::AudioCallback
+{
+	virtual void handleAudioData(const int16_t * frames, const int numFrames) override
+	{
+		printf("received %d frames!\n", numFrames);
+	}
+};
+
+static void testAudioStreaming(PS3EYECam * eye)
+{
+	PS3EYEMic mic;
+	MyAudioCallback audioCallback;
+	
+	if (mic.init(eye->getDevice(), &audioCallback))
+	{
+		SDL_Delay(4000);
+		
+		mic.shut();
+	}
+}
 
 int main(int argc, char * argv[])
 {
@@ -28,6 +50,11 @@ int main(int argc, char * argv[])
 		eye = devices[0];
 	
 	devices.clear();
+	
+	if (eye != nullptr)
+	{
+		testAudioStreaming(eye.get());
+	}
 	
 	if (eye != nullptr && !eye->init(CAM_SX, CAM_SY, CAM_FPS, PS3EYECam::EOutputFormat::RGB))
 		errorString = "failed to initialize PS3 eye camera";

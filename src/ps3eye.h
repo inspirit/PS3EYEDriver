@@ -144,6 +144,7 @@ public:
     bool isStreaming() const { return is_streaming; }
     bool isInitialized() const { return device_ != NULL && handle_ != NULL && usb_buf != NULL; }
 
+    libusb_device *getDevice() const { return device_; }
 	bool getUSBPortPath(char *out_identifier, size_t max_identifier_length) const;
 	
 	// Get a frame from the camera. Notes:
