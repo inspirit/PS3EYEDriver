@@ -1248,6 +1248,10 @@ bool PS3EYECam::open_usb()
 		return false;
 	}
 
+	// Linux has a kernel module for the PS3 eye camera (that's where most of the code in here comes from..)
+	// so we must detach the driver before we can hook up with the eye ourselves
+	libusb_detach_kernel_driver(handle_, 0);
+
 	//libusb_set_configuration(handle_, 0);
 
 	res = libusb_claim_interface(handle_, 0);
@@ -1263,6 +1267,7 @@ void PS3EYECam::close_usb()
 {
 	debug("closing device\n");
 	libusb_release_interface(handle_, 0);
+	libusb_attach_kernel_driver(handle_, 0);
 	libusb_close(handle_);
 	libusb_unref_device(device_);
 	handle_ = NULL;
