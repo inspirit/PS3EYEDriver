@@ -140,6 +140,16 @@ public:
         sccb_reg_write(0x0c, val);
 	}
     
+    bool getTestPattern() const { return testPattern; }
+    void setTestPattern(bool enable)
+    {
+        testPattern = enable;
+        uint8_t val = sccb_reg_read(0x0C);
+        val &= ~0b00000001;
+        if (testPattern) val |= 0b00000001; // 0x80;
+        sccb_reg_write(0x0C, val);
+    }
+
 
     bool isStreaming() const { return is_streaming; }
     bool isInitialized() const { return device_ != NULL && handle_ != NULL && usb_buf != NULL; }
@@ -197,6 +207,7 @@ private:
 	uint8_t greenblc; // 0 <-> 255
     bool flip_h;
     bool flip_v;
+    bool testPattern;
 	//
     bool is_streaming;
 

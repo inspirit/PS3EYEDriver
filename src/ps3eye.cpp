@@ -1051,7 +1051,7 @@ PS3EYECam::PS3EYECam(libusb_device *device)
 	greenblc = 128;
     flip_h = false;
     flip_v = false;
-
+    testPattern = false;
 	usb_buf = NULL;
 	handle_ = NULL;
 
