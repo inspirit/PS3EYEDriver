@@ -14,9 +14,18 @@ static uint8_t imageData[CAM_SX * CAM_SY * 3];
 
 struct MyAudioCallback : PS3EYEMic::AudioCallback
 {
+	std::vector<float> history;
+	
 	virtual void handleAudioData(const int16_t * frames, const int numFrames) override
 	{
-		printf("received %d frames!\n", numFrames);
+		//printf("received %d frames!\n", numFrames);
+		
+		for (int i = 0; i < numFrames; ++i)
+		{
+			const float value = frames[i * 4 + 0] / float(1 << 15);
+			
+			history.push_back(value);
+		}
 	}
 };
 
@@ -27,7 +36,33 @@ static void testAudioStreaming(PS3EYECam * eye)
 	
 	if (mic.init(eye->getDevice(), &audioCallback))
 	{
-		SDL_Delay(4000);
+		const auto endTime = SDL_GetTicks() + 10000;
+		
+		while (SDL_GetTicks() < endTime)
+		{
+			framework.process();
+			
+			framework.beginDraw(0, 0, 0, 0);
+			{
+				if (audioCallback.history.size() < 2)
+					continue;
+				
+				gxScalef(CAM_SX / float(audioCallback.history.size() - 1), CAM_SY / 2.f, 1.f);
+				gxTranslatef(0, 1, 0);
+				
+				setColor(colorWhite);
+				hqBegin(HQ_LINES, true);
+				for (int i = 0; i + 1 < audioCallback.history.size(); ++i)
+				{
+					const float value1 = audioCallback.history[i + 0];
+					const float value2 = audioCallback.history[i + 1];
+					
+					hqLine(i + 0, value1, .4f, i + 1, value2, .4f);
+				}
+				hqEnd();
+			}
+			framework.endDraw();
+		}
 		
 		mic.shut();
 	}
