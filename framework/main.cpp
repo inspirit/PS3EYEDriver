@@ -6,6 +6,8 @@
 #define CAM_SY 480
 #define CAM_FPS 60
 
+#define CAM_GRAYSCALE true
+
 using namespace ps3eye;
 
 static std::string errorString;
@@ -38,7 +40,7 @@ static void testAudioStreaming(PS3EYECam * eye)
 	{
 		const auto endTime = SDL_GetTicks() + 10000;
 		
-		while (SDL_GetTicks() < endTime)
+		while (SDL_GetTicks() < endTime && !keyboard.wentDown(SDLK_SPACE))
 		{
 			framework.process();
 			
@@ -91,10 +93,18 @@ int main(int argc, char * argv[])
 		testAudioStreaming(eye.get());
 	}
 	
-	if (eye != nullptr && !eye->init(CAM_SX, CAM_SY, CAM_FPS, PS3EYECam::EOutputFormat::RGB))
+	if (eye != nullptr && !eye->init(CAM_SX, CAM_SY, CAM_FPS,
+		CAM_GRAYSCALE
+		? PS3EYECam::EOutputFormat::Gray
+		: PS3EYECam::EOutputFormat::RGB))
 		errorString = "failed to initialize PS3 eye camera";
 	else
 		eye->start();
+	
+	if (!errorString.empty())
+	{
+		logError("error: %s", errorString.c_str());
+	}
 	
 	GLuint texture = 0;
 	
@@ -114,7 +124,19 @@ int main(int argc, char * argv[])
 			if (texture != 0)
 				glDeleteTextures(1, &texture);
 			
-			texture = createTextureFromRGB8(imageData, CAM_SX, CAM_SY, false, true);
+			if (CAM_GRAYSCALE)
+			{
+				texture = createTextureFromR8(imageData, CAM_SX, CAM_SY, false, true);
+				
+				glBindTexture(GL_TEXTURE_2D, texture);
+				GLint swizzleMask[4] = { GL_RED, GL_RED, GL_RED, GL_ONE };
+				glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+				glBindTexture(GL_TEXTURE_2D, 0);
+			}
+			else
+			{
+				texture = createTextureFromRGB8(imageData, CAM_SX, CAM_SY, false, true);
+			}
 		}
 		
 		framework.beginDraw(0, 0, 0, 0);
