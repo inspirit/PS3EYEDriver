@@ -555,8 +555,8 @@ public:
 		uint8_t*		dest_row		= outBuffer + dest_stride + 1; 	// We start outputting at the second pixel of the second row's G component
 		uint32_t R,G,B;
 		
-		// Fill rows 1 to height-1 of the destination buffer. First and last row are filled separately (they are copied from the second row and second-to-last rows respectively)
-		for (int y = 0; y < frame_height-1; source_row += source_stride, dest_row += dest_stride, ++y)
+		// Fill rows 1 to height-2 of the destination buffer. First and last row are filled separately (they are copied from the second row and second-to-last rows respectively)
+		for (int y = 0; y < frame_height-2; source_row += source_stride, dest_row += dest_stride, ++y)
 		{
 			const uint8_t* source		= source_row;
 			const uint8_t* source_end	= source + (source_stride-2);								// -2 to deal with the fact that we're starting at the second pixel of the row and should end at the second-to-last pixel of the row (first and last are filled separately)
@@ -656,8 +656,8 @@ public:
 		uint8_t*		dest_row				= outBuffer + dest_stride + num_output_channels + 1; 	// We start outputting at the second pixel of the second row's G component
 		int				swap_br					= inBGR ? 1 : -1;
 
-		// Fill rows 1 to height-1 of the destination buffer. First and last row are filled separately (they are copied from the second row and second-to-last rows respectively)
-		for (int y = 0; y < frame_height-1; source_row += source_stride, dest_row += dest_stride, ++y)
+		// Fill rows 1 to height-2 of the destination buffer. First and last row are filled separately (they are copied from the second row and second-to-last rows respectively)
+		for (int y = 0; y < frame_height-2; source_row += source_stride, dest_row += dest_stride, ++y)
 		{
 			const uint8_t* source		= source_row;
 			const uint8_t* source_end	= source + (source_stride-2);								// -2 to deal with the fact that we're starting at the second pixel of the row and should end at the second-to-last pixel of the row (first and last are filled separately)
