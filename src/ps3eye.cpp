@@ -444,6 +444,16 @@ int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
     return cnt;
 }
 
+void micStarted()
+{
+	USBMgr::instance()->cameraStarted();
+}
+
+void micStopped()
+{
+	USBMgr::instance()->cameraStopped();
+}
+
 static void LIBUSB_CALL transfer_completed_callback(struct libusb_transfer *xfr);
 
 class FrameQueue

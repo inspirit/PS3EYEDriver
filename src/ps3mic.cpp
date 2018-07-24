@@ -28,15 +28,66 @@ only has one capsule.
 
 #define INTERFACE_NUMBER 2
 
+#define ISO_ENDPOINT 0x84
+
 // for streaming we set up a bunch of transfers, which will each transfer a number of packets of a certain size
 // I have no idea what the ideal values are here.. I guess there's a sweet spot between still having robust transfers
 // while still maintaining an acceptable latency.
 // todo : find good values for these numbers
 #define PACKET_SIZE 128
-#define NUM_PACKETS 8
+#define NUM_PACKETS 2
 #define NUM_TRANSFERS 2
 
+//
+
+namespace ps3eye
+{
+	extern void micStarted();
+	extern void micStopped();
+}
+
+using namespace ps3eye;
+
+//
+
+static void handleTransfer(struct libusb_transfer * transfer)
+{
+	PS3EYEMic * mic = (PS3EYEMic*)transfer->user_data;
+	
+	for (int i = 0; i < transfer->num_iso_packets; ++i)
+	{
+		libusb_iso_packet_descriptor & packet = transfer->iso_packet_desc[i];
+	
+		if (packet.status != LIBUSB_TRANSFER_COMPLETED)
+		{
+			debug("packet status != LIBUSB_TRANSFER_COMPLETED");
+			continue;
+		}
+		
+		const int frameSize = 4 * sizeof(int16_t);
+		
+		const int numBytes = packet.actual_length;
+		assert((numBytes % frameSize) == 0);
+		const int numFrames = numBytes / frameSize;
+		
+		if (numFrames > 0)
+		{
+			const int16_t * frames = (int16_t*)libusb_get_iso_packet_buffer_simple(transfer, i);
+			
+			mic->audioCallback->handleAudioData(frames, numFrames);
+		}
+	}
+	
+	const int res = libusb_submit_transfer(transfer);
+	
+	if (res < 0)
+	{
+		debug("failed to submit transfer: %d: %s", res, libusb_error_name(res));
+	}
+}
+
 PS3EYEMic::PS3EYEMic()
+	: numActiveTransfers(0)
 {
 }
 
@@ -44,7 +95,7 @@ PS3EYEMic::~PS3EYEMic()
 {
 }
 
-bool PS3EYEMic::init(libusb_device * _device, const AudioCallback * _audioCallback)
+bool PS3EYEMic::init(libusb_device * _device, AudioCallback * _audioCallback)
 {
 	assert(device == nullptr);
 	assert(audioCallback == nullptr);
@@ -100,19 +151,71 @@ bool PS3EYEMic::init(libusb_device * _device, const AudioCallback * _audioCallba
         return false;
 	}
 	
-	beginTransfers(PACKET_SIZE, NUM_PACKETS, NUM_TRANSFERS);
+	if (!beginTransfers(PACKET_SIZE, NUM_PACKETS, NUM_TRANSFERS))
+	{
+		return false;
+	}
+	
+	micStarted();
 
 	return true;
 }
 
 void PS3EYEMic::shut()
 {
-
+	micStopped();
 }
 
-void PS3EYEMic::beginTransfers(const int packetSize, const int numPackets, const int numTransfers)
+bool PS3EYEMic::beginTransfers(const int packetSize, const int numPackets, const int numTransfers)
 {
-
+	const int transferSize = packetSize * numPackets;
+	
+	assert(transferData == nullptr);
+	transferData = new uint8_t[transferSize];
+	
+	//
+	
+	assert(transfers.empty());
+	transfers.resize(numTransfers);
+	
+	for (int i = 0; i < numTransfers; ++i)
+	{
+		auto & transfer = transfers[i];
+		
+		transfer = libusb_alloc_transfer(numPackets);
+		
+		if (transfer == nullptr)
+		{
+			debug("failed to allocate transfer");
+			return false;
+		}
+		
+		// todo : check result codes
+		
+		libusb_fill_iso_transfer(
+			transfer,
+			deviceHandle,
+			ISO_ENDPOINT,
+			transferData,
+			transferSize,
+			numPackets,
+			handleTransfer,
+			this,
+			1000);
+		libusb_set_iso_packet_lengths(transfer, packetSize);
+		
+		const int res = libusb_submit_transfer(transfer);
+		
+		if (res < 0)
+		{
+			debug("failed to submit transfer. %d: %s", res, libusb_error_name(res));
+			return false;
+		}
+		
+		numActiveTransfers++;
+	}
+	
+	return true;
 }
 
 void PS3EYEMic::cancelTransfersBegin()

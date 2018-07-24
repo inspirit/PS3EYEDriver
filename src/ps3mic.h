@@ -1,7 +1,11 @@
 #pragma once
 
+#include <atomic>
+#include <vector>
+
 struct libusb_device;
 struct libusb_device_handle;
+struct libusb_transfer;
 
 struct PS3EYEMic
 {
@@ -15,16 +19,23 @@ struct PS3EYEMic
 	libusb_device * device = nullptr;
 	libusb_device_handle * deviceHandle = nullptr;
 
-	const AudioCallback * audioCallback = nullptr;
+	AudioCallback * audioCallback = nullptr;
+	
+	uint8_t * transferData = nullptr;
+	
+	std::vector<libusb_transfer*> transfers;
+	std::atomic<int> numActiveTransfers;
 
 	PS3EYEMic();
 	~PS3EYEMic();
 
-	bool init(libusb_device * device, const AudioCallback * audioCallback);
+	bool init(libusb_device * device, AudioCallback * audioCallback);
 	void shut();
 
-	void beginTransfers(const int packetSize, const int numPackets, const int numTransfers);
+	bool beginTransfers(const int packetSize, const int numPackets, const int numTransfers);
 	void cancelTransfersBegin();
 	void cancelTransfersWait();
 	void freeTransfers();
+	
+	void poll();
 };
