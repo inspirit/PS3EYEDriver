@@ -46,6 +46,8 @@ extern void micStopped();
 
 //
 
+const int PS3EYEMic::kSampleRate = 16000;
+
 void PS3EYEMic::handleTransfer(struct libusb_transfer * transfer)
 {
 	PS3EYEMic * mic = (PS3EYEMic*)transfer->user_data;

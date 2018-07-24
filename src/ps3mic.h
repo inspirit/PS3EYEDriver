@@ -70,6 +70,8 @@ private:
 	static void handleTransfer(struct libusb_transfer * transfer);
 
 public:
+	static const int kSampleRate;
+	
 	PS3EYEMic();
 	~PS3EYEMic();
 
