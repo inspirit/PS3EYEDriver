@@ -831,6 +831,13 @@ public:
 		// Wait for cancelation to finish
 		num_active_transfers_condition.wait(lock, [this]() { return num_active_transfers == 0; });
 
+		// Free completed transfers
+		for (int index = 0; index < NUM_TRANSFERS; ++index)
+		{
+			libusb_free_transfer(xfr[index]);
+			xfr[index] = nullptr;
+		}
+		
 		USBMgr::instance()->cameraStopped();
 
 		free(transfer_buffer);
@@ -990,8 +997,7 @@ static void LIBUSB_CALL transfer_completed_callback(struct libusb_transfer *xfr)
     if (status != LIBUSB_TRANSFER_COMPLETED) 
     {
         debug("transfer status %d\n", status);
-
-        libusb_free_transfer(xfr);
+        
 		urb->transfer_canceled();
         
         if(status != LIBUSB_TRANSFER_CANCELLED)
