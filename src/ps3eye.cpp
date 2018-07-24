@@ -83,6 +83,12 @@
 #define snprintf _snprintf
 #endif
 
+#if defined(DEBUG) && 0
+#define debug(...) fprintf(stdout, __VA_ARGS__)
+#else
+#define debug(...)
+#endif
+
 namespace ps3eye {
 
 #define TRANSFER_SIZE		65536
