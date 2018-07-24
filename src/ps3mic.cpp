@@ -21,26 +21,27 @@ only has one capsule.
 
 #if defined(DEBUG)
 	#include <stdio.h>
-	#define debug(...) do { fprintf(stdout, __VA_ARGS__); fprintf(stdout, "\n"); } while (false)
+	#define debugMessage(...) do { fprintf(stdout, __VA_ARGS__); fprintf(stdout, "\n"); } while (false)
 #else
-	#define debug(...)
+	#define debugMessage(...)
 #endif
 
-#define INTERFACE_NUMBER 2
+namespace ps3eye {
 
-#define ISO_ENDPOINT_ADDRESS 0x84
+static const int INTERFACE_NUMBER = 2;
 
-// for streaming we set up a bunch of transfers, which will each transfer a number of packets of a certain size
-// I have no idea what the ideal values are here.. I guess there's a sweet spot between still having robust transfers
-// while still maintaining an acceptable latency.
-// todo : find good values for these numbers
-#define PACKET_SIZE 128
-#define NUM_PACKETS 2
-#define NUM_TRANSFERS 2
+static const int ISO_ENDPOINT_ADDRESS = 0x84;
+
+/*
+For streaming we set up a bunch of transfers, which will each transfer a number of packets of a certain size. I have no idea what the ideal values are here. I guess there's a sweet spot between still having robust transfers while still maintaining an acceptable latency.
+
+todo : find good values for these numbers
+*/
+static const int PACKET_SIZE = 128;
+static const int NUM_PACKETS = 2;
+static const int NUM_TRANSFERS = 2;
 
 //
-
-namespace ps3eye {
 
 extern void micStarted();
 extern void micStopped();
@@ -59,7 +60,7 @@ static void handleTransfer(struct libusb_transfer * transfer)
 	
 		if (packet.status != LIBUSB_TRANSFER_COMPLETED)
 		{
-			debug("packet status != LIBUSB_TRANSFER_COMPLETED");
+			debugMessage("packet status != LIBUSB_TRANSFER_COMPLETED");
 			continue;
 		}
 		
@@ -87,7 +88,7 @@ static void handleTransfer(struct libusb_transfer * transfer)
 		
 		if (res < 0)
 		{
-			debug("failed to submit transfer: %d: %s", res, libusb_error_name(res));
+			debugMessage("failed to submit transfer: %d: %s", res, libusb_error_name(res));
 		}
 	}
 }
@@ -130,14 +131,14 @@ bool PS3EYEMic::initImpl(libusb_device * _device, AudioCallback * _audioCallback
 	res = libusb_open(device, &deviceHandle);
 	if (res != LIBUSB_SUCCESS)
 	{
-		debug("device open error: %d: %s", res, libusb_error_name(res));
+		debugMessage("device open error: %d: %s", res, libusb_error_name(res));
 		return false;
 	}
 
 	res = libusb_set_configuration(deviceHandle, 1);
 	if (res != LIBUSB_SUCCESS)
 	{
-		debug("failed to set device configuration: %d: %s", res, libusb_error_name(res));
+		debugMessage("failed to set device configuration: %d: %s", res, libusb_error_name(res));
 		return false;
 	}
 
@@ -148,7 +149,7 @@ bool PS3EYEMic::initImpl(libusb_device * _device, AudioCallback * _audioCallback
         res = libusb_detach_kernel_driver(deviceHandle, INTERFACE_NUMBER);
         if (res != LIBUSB_SUCCESS)
         {
-            debug("failed to detach kernel driver: %d: %s", res, libusb_error_name(res));
+            debugMessage("failed to detach kernel driver: %d: %s", res, libusb_error_name(res));
             return false;
         }
     }
@@ -160,7 +161,7 @@ bool PS3EYEMic::initImpl(libusb_device * _device, AudioCallback * _audioCallback
 	{
 		// todo : on Macos and Windows : suggest to unload kernel driver when interface claim fails
 
-		debug("failed to claim interface: %d: %s", res, libusb_error_name(res));
+		debugMessage("failed to claim interface: %d: %s", res, libusb_error_name(res));
         return false;
     }
 
@@ -169,7 +170,7 @@ bool PS3EYEMic::initImpl(libusb_device * _device, AudioCallback * _audioCallback
 	res = libusb_set_interface_alt_setting(deviceHandle, INTERFACE_NUMBER, 1);
 	if (res != LIBUSB_SUCCESS)
 	{
-		debug("failed to set interface alt setting: %d: %sn", res, libusb_error_name(res));
+		debugMessage("failed to set interface alt setting: %d: %sn", res, libusb_error_name(res));
         return false;
 	}
 	
@@ -213,11 +214,11 @@ void PS3EYEMic::shut()
 	{
 		int res = libusb_release_interface(deviceHandle, INTERFACE_NUMBER);
 		if (res != LIBUSB_SUCCESS)
-			debug("failed to release interface. %d: %s", res, libusb_error_name(res));
+			debugMessage("failed to release interface. %d: %s", res, libusb_error_name(res));
 		
 		res = libusb_attach_kernel_driver(deviceHandle, INTERFACE_NUMBER);
 		if (res != LIBUSB_SUCCESS)
-			debug("failed to attach kernel driver for interface. %d: %s", res, libusb_error_name(res));
+			debugMessage("failed to attach kernel driver for interface. %d: %s", res, libusb_error_name(res));
 		
 		libusb_close(deviceHandle);
 		deviceHandle = nullptr;
@@ -249,7 +250,7 @@ bool PS3EYEMic::beginTransfers(const int packetSize, const int numPackets, const
 		
 		if (transfer == nullptr)
 		{
-			debug("failed to allocate transfer");
+			debugMessage("failed to allocate transfer");
 			return false;
 		}
 		
@@ -272,7 +273,7 @@ bool PS3EYEMic::beginTransfers(const int packetSize, const int numPackets, const
 		
 		if (res != LIBUSB_SUCCESS)
 		{
-			debug("failed to submit transfer. %d: %s", res, libusb_error_name(res));
+			debugMessage("failed to submit transfer. %d: %s", res, libusb_error_name(res));
 			return false;
 		}
 		
@@ -314,5 +315,7 @@ void PS3EYEMic::freeTransfers()
 	delete [] transferData;
 	transferData = nullptr;
 }
+
+#undef debugMessage
 
 }
