@@ -46,7 +46,7 @@ extern void micStopped();
 
 //
 
-static void handleTransfer(struct libusb_transfer * transfer)
+void PS3EYEMic::handleTransfer(struct libusb_transfer * transfer)
 {
 	PS3EYEMic * mic = (PS3EYEMic*)transfer->user_data;
 	
@@ -132,6 +132,11 @@ bool PS3EYEMic::init(libusb_device * device, AudioCallback * audioCallback)
 	return result;
 }
 
+void PS3EYEMic::shut()
+{
+	shutImpl();
+}
+
 bool PS3EYEMic::initImpl(libusb_device * _device, AudioCallback * _audioCallback)
 {
 	assert(device == nullptr);
@@ -215,7 +220,7 @@ bool PS3EYEMic::initImpl(libusb_device * _device, AudioCallback * _audioCallback
 	return true;
 }
 
-void PS3EYEMic::shut()
+void PS3EYEMic::shutImpl()
 {
 	if (numActiveTransfers > 0)
 	{

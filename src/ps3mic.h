@@ -50,8 +50,9 @@ struct AudioCallback
 	virtual void handleAudioData(const AudioFrame * frames, const int numFrames) = 0;
 };
 
-struct PS3EYEMic
+class PS3EYEMic
 {
+private:
 	libusb_device * device = nullptr;
 	libusb_device_handle * deviceHandle = nullptr;
 	bool started = false;
@@ -65,13 +66,19 @@ struct PS3EYEMic
 	std::mutex numActiveTransfersMutex;
 	std::condition_variable numActiveTransfersCondition;
 	std::atomic<bool> endTransfers;
+	
+	static void handleTransfer(struct libusb_transfer * transfer);
 
+public:
 	PS3EYEMic();
 	~PS3EYEMic();
 
 	bool init(libusb_device * device, AudioCallback * audioCallback); // Initialize and begin capturing microphone data
-	bool initImpl(libusb_device * device, AudioCallback * audioCallback);
 	void shut(); // End capturing microphone data and shutdown
+	
+private:
+	bool initImpl(libusb_device * device, AudioCallback * audioCallback);
+	void shutImpl();
 
 	bool beginTransfers(const int packetSize, const int numPackets, const int numTransfers);
 	void endTransfersBegin();
