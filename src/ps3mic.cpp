@@ -35,9 +35,9 @@ For streaming we set up a bunch of transfers, which will each transfer a number 
 
 todo : find good values for these numbers
 */
-static const int PACKET_SIZE = 512;
-static const int NUM_PACKETS = 2;
-static const int NUM_TRANSFERS = 2;
+static const int PACKET_SIZE = 1024;
+static const int NUM_PACKETS = 1;
+static const int NUM_TRANSFERS = 4;
 
 //
 
