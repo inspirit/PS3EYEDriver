@@ -86,9 +86,21 @@ void PS3EYEMic::handleTransfer(struct libusb_transfer * transfer)
 			}
 		}
 		
-		const int res = libusb_submit_transfer(transfer);
+		int res = LIBUSB_SUCCESS;
 		
-		if (res < 0)
+		for (int i = 0; i < NUM_TRANSFERS; ++i)
+		{
+			// on Macos (at least), libusb_submit_transfer may fail due to 'kIOReturnIsoTooOld'. the version of libusb
+			// we're using doesn't actually report this, instead we get LIBUSB_ERROR_OTHER. for now, handle errors
+			// by simply retrying, until we retried for every transfer
+			
+			res = libusb_submit_transfer(transfer);
+			
+			if (res == LIBUSB_SUCCESS)
+				break;
+		}
+		
+		if (res != LIBUSB_SUCCESS)
 		{
 			debugMessage("failed to submit transfer: %d: %s", res, libusb_error_name(res));
 			endTransfer = true;
