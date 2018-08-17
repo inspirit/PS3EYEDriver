@@ -75,49 +75,53 @@ struct MyAudioCallback : AudioCallback
 
 static void drawAudioHistory(const MyAudioCallback & audioCallback)
 {
-	gxScalef(CAM_SX / float(audioCallback.maxHistoryFrames - 1), CAM_SY, 1.f);
-
-	for (int c = 0; c < NUM_CHANNELS; ++c)
+	gxPushMatrix();
 	{
-		auto & history = audioCallback.histories[c];
-		
-		gxPushMatrix();
+		gxScalef(CAM_SX / float(audioCallback.maxHistoryFrames - 1), CAM_SY, 1.f);
+
+		for (int c = 0; c < NUM_CHANNELS; ++c)
 		{
-			gxTranslatef(0, (c + 1.f) / (NUM_CHANNELS + 1), 0);
-			gxScalef(1, 1.f / NUM_CHANNELS, 1);
+			auto & history = audioCallback.histories[c];
 			
-			const Color colors[NUM_CHANNELS] =
+			gxPushMatrix();
 			{
-				colorRed,
-				colorGreen,
-				colorBlue,
-				colorYellow,
-				colorWhite
-			};
-			
-			setColor(colors[c]);
-			hqBegin(HQ_LINES, true);
-			{
-				for (int i = audioCallback.firstHistoryFrame, n = 0; n + 1 < audioCallback.maxHistoryFrames; ++n)
+				gxTranslatef(0, (c + 1.f) / (NUM_CHANNELS + 1), 0);
+				gxScalef(1, 1.f / NUM_CHANNELS, 1);
+				
+				const Color colors[NUM_CHANNELS] =
 				{
-					const int index1 = i;
-					const int index2 = i + 1 == audioCallback.maxHistoryFrames ? 0 : i + 1;
-					
-					const float value1 = history[index1];
-					const float value2 = history[index2];
-					const float strokeSize = .4f;
-					
-					hqLine(n + 0, value1, strokeSize, n + 1, value2, strokeSize);
-					
-					//
-					
-					i = index2;
+					colorRed,
+					colorGreen,
+					colorBlue,
+					colorYellow,
+					colorWhite
+				};
+				
+				setColor(colors[c]);
+				hqBegin(HQ_LINES, true);
+				{
+					for (int i = audioCallback.firstHistoryFrame, n = 0; n + 1 < audioCallback.maxHistoryFrames; ++n)
+					{
+						const int index1 = i;
+						const int index2 = i + 1 == audioCallback.maxHistoryFrames ? 0 : i + 1;
+						
+						const float value1 = history[index1];
+						const float value2 = history[index2];
+						const float strokeSize = .4f;
+						
+						hqLine(n + 0, value1, strokeSize, n + 1, value2, strokeSize);
+						
+						//
+						
+						i = index2;
+					}
 				}
+				hqEnd();
 			}
-			hqEnd();
+			gxPopMatrix();
 		}
-		gxPopMatrix();
 	}
+	gxPopMatrix();
 }
 
 #if 0 // todo : remove
@@ -206,12 +210,25 @@ int main(int argc, char * argv[])
 	
 	GLuint texture = 0;
 	
+	bool stressTest = false;
+	
 	while (!framework.quitRequested)
 	{
 		framework.process();
 		
 		if (keyboard.wentDown(SDLK_ESCAPE))
 			framework.quitRequested = true;
+		
+		if (keyboard.isDown(SDLK_LSHIFT) && keyboard.wentDown(SDLK_t))
+			stressTest = !stressTest;
+		
+		if (stressTest && (rand() % 100) == 0)
+		{
+			if (mic.getIsInitialized())
+				mic.shut();
+			else
+				mic.init(eye->getDevice(), &audioCallback);
+		}
 		
 		if (eye != nullptr && eye->isStreaming())
 		{
@@ -252,6 +269,13 @@ int main(int argc, char * argv[])
 			}
 			
 			drawAudioHistory(audioCallback);
+			
+			hqBegin(HQ_FILLED_CIRCLES);
+			setColor((eye != nullptr && eye->isStreaming()) ? colorGreen : colorRed);
+			hqFillCircle(14, 14, 10);
+			setColor(mic.getIsInitialized() ? colorGreen : colorRed);
+			hqFillCircle(14, 40, 10);
+			hqEnd();
 		}
 		framework.endDraw();
 	}
