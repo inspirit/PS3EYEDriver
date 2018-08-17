@@ -151,6 +151,11 @@ void PS3EYEMic::shut()
 	shutImpl();
 }
 
+bool PS3EYEMic::getIsInitialized() const
+{
+	return started == true;
+}
+
 bool PS3EYEMic::initImpl(libusb_device * _device, AudioCallback * _audioCallback)
 {
 	assert(device == nullptr);

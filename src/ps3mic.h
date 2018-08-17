@@ -78,6 +78,8 @@ public:
 	bool init(libusb_device * device, AudioCallback * audioCallback); // Initialize and begin capturing microphone data
 	void shut(); // End capturing microphone data and shutdown
 	
+	bool getIsInitialized() const;
+	
 private:
 	bool initImpl(libusb_device * device, AudioCallback * audioCallback);
 	void shutImpl();
