@@ -124,37 +124,6 @@ static void drawAudioHistory(const MyAudioCallback & audioCallback)
 	gxPopMatrix();
 }
 
-#if 0 // todo : remove
-
-static void testAudioStreaming(PS3EYECam * eye)
-{
-	const int testDuration = 10; // seconds
-	const int historySize = 1; // seconds
-	
-	PS3EYEMic mic;
-	MyAudioCallback audioCallback(historySize);
-	
-	if (mic.init(eye->getDevice(), &audioCallback))
-	{
-		const auto endTime = SDL_GetTicks() + testDuration * 1000;
-		
-		while (SDL_GetTicks() < endTime && !keyboard.wentDown(SDLK_SPACE))
-		{
-			framework.process();
-			
-			framework.beginDraw(0, 0, 0, 0);
-			{
-				drawAudioHistory(audioCallback);
-			}
-			framework.endDraw();
-		}
-		
-		mic.shut();
-	}
-}
-
-#endif
-
 int main(int argc, char * argv[])
 {
 	if (!framework.init(0, nullptr, 640, 480))
@@ -172,13 +141,6 @@ int main(int argc, char * argv[])
 		eye = devices[0];
 	
 	devices.clear();
-
-#if 0 // todo : remove
-	if (eye != nullptr)
-	{
-		testAudioStreaming(eye.get());
-	}
-#endif
 	
 	if (eye != nullptr)
 	{

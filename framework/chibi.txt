@@ -11,9 +11,16 @@ library libps3eye
 
 	depend_package LibUSB
 
-app libps3eye-example
+app libps3eye-example-video
 
 	depend_library libps3eye
 	depend_library framework
 
-	add_files main.cpp
+	add_files video.cpp
+
+app libps3eye-example-audio
+
+	depend_library libps3eye
+	depend_library framework
+
+	add_files audio.cpp
