@@ -15,7 +15,7 @@ static uint8_t imageData[CAM_SX * CAM_SY * 3];
 
 int main(int argc, char * argv[])
 {
-	if (!framework.init(0, nullptr, 640, 480))
+	if (!framework.init(640, 480))
 		return -1;
 	
 	auto devices = PS3EYECam::getDevices();
