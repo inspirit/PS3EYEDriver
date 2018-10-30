@@ -32,8 +32,6 @@ static const int ISO_ENDPOINT_ADDRESS = 0x84;
 
 /*
 For streaming we set up a bunch of transfers, which will each transfer a number of packets of a certain size. I have no idea what the ideal values are here. I guess there's a sweet spot between still having robust transfers while still maintaining an acceptable latency.
-
-todo : find good values for these numbers
 */
 static const int PACKET_SIZE = 1024;
 static const int NUM_PACKETS = 1;
