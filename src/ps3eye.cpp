@@ -480,7 +480,7 @@ public:
 		return new_frame;
 	}
 
-	void Dequeue(uint8_t* new_frame, int frame_width, int frame_height, PS3EYECam::EOutputFormat outputFormat)
+	void Dequeue(uint8_t* new_frame, int frame_width, int frame_height, PS3EYECam::EOutputFormat outputFormat, bool flip_v)
 	{		
 		std::unique_lock<std::mutex> lock(mutex);
 
@@ -497,7 +497,7 @@ public:
 		else if (outputFormat == PS3EYECam::EOutputFormat::BGR ||
 				 outputFormat == PS3EYECam::EOutputFormat::RGB)
 		{
-			DebayerRGB(frame_width, frame_height, source, new_frame, outputFormat == PS3EYECam::EOutputFormat::BGR);
+			DebayerRGB(frame_width, frame_height, source, new_frame, outputFormat == PS3EYECam::EOutputFormat::BGR, flip_v);
 		}		
 		else if (outputFormat == PS3EYECam::EOutputFormat::Gray)
 		{
@@ -608,7 +608,7 @@ public:
 		}
 	}
 
-	void DebayerRGB(int frame_width, int frame_height, const uint8_t* inBayer, uint8_t* outBuffer, bool inBGR)
+	void DebayerRGB(int frame_width, int frame_height, const uint8_t* inBayer, uint8_t* outBuffer, bool inBGR, bool flip_v)
 	{
 		// PSMove output is in the following Bayer format (GRBG):
 		//
@@ -634,7 +634,7 @@ public:
 			uint8_t* dest				= dest_row;		
 
 			// Row starting with Green
-			if (y % 2 == 0)
+			if (y % 2 == (int)flip_v)
 			{
 				// Fill first pixel (green)
 				dest[-1*swap_br]	= (source[source_stride] + source[source_stride + 2] + 1) >> 1;
@@ -1216,7 +1216,7 @@ uint32_t PS3EYECam::getOutputBytesPerPixel() const
 
 void PS3EYECam::getFrame(uint8_t* frame)
 {
-	urb->frame_queue->Dequeue(frame, frame_width, frame_height, frame_output_format);
+	urb->frame_queue->Dequeue(frame, frame_width, frame_height, frame_output_format, flip_v);
 }
 
 bool PS3EYECam::open_usb()
