@@ -497,8 +497,13 @@ public:
 		else if (outputFormat == PS3EYECam::EOutputFormat::BGR ||
 				 outputFormat == PS3EYECam::EOutputFormat::RGB)
 		{
-			DebayerRGB(frame_width, frame_height, source, new_frame, outputFormat == PS3EYECam::EOutputFormat::BGR, flip_v);
-		}		
+			DebayerRGB<3>(frame_width, frame_height, source, new_frame, outputFormat == PS3EYECam::EOutputFormat::BGR, flip_v);
+		}
+		else if (outputFormat == PS3EYECam::EOutputFormat::BGRA ||
+			outputFormat == PS3EYECam::EOutputFormat::RGBA)
+		{
+			DebayerRGB<4>(frame_width, frame_height, source, new_frame, outputFormat == PS3EYECam::EOutputFormat::BGRA, flip_v);
+		}
 		else if (outputFormat == PS3EYECam::EOutputFormat::Gray)
 		{
 			DebayerGray(frame_width, frame_height, source, new_frame);
@@ -608,6 +613,10 @@ public:
 		}
 	}
 
+	template<int num_channels>
+	inline static void setAlpha(uint8_t *destGreen);
+
+	template<int num_output_channels>
 	void DebayerRGB(int frame_width, int frame_height, const uint8_t* inBayer, uint8_t* outBuffer, bool inBGR, bool flip_v)
 	{
 		// PSMove output is in the following Bayer format (GRBG):
@@ -619,7 +628,6 @@ public:
 		//
 		// This is the normal Bayer pattern shifted left one place.
 
-		int				num_output_channels	    = 3;
 		int				source_stride			= frame_width;
 		const uint8_t*	source_row				= inBayer;												// Start at first bayer pixel
 		int				dest_stride				= frame_width * num_output_channels;
@@ -639,7 +647,8 @@ public:
 				// Fill first pixel (green)
 				dest[-1*swap_br]	= (source[source_stride] + source[source_stride + 2] + 1) >> 1;
 				dest[0]				= source[source_stride + 1];
-				dest[1*swap_br]		= (source[1] + source[source_stride * 2 + 1] + 1) >> 1;		
+				dest[1*swap_br]		= (source[1] + source[source_stride * 2 + 1] + 1) >> 1;
+				setAlpha<num_output_channels>(dest);
 
 				source++;
 				dest += num_output_channels;
@@ -651,13 +660,15 @@ public:
 					uint8_t* cur_pixel	= dest;
 					cur_pixel[-1*swap_br]	= source[source_stride + 1];
 					cur_pixel[0]			= (source[1] + source[source_stride] + source[source_stride + 2] + source[source_stride * 2 + 1] + 2) >> 2;
-					cur_pixel[1*swap_br]	= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;				
+					cur_pixel[1*swap_br]	= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;
+					setAlpha<num_output_channels>(cur_pixel);
 
 					//  Green pixel
 					uint8_t* next_pixel		= cur_pixel+num_output_channels;
 					next_pixel[-1*swap_br]	= (source[source_stride + 1] + source[source_stride + 3] + 1) >> 1;					
 					next_pixel[0]			= source[source_stride + 2];
 					next_pixel[1*swap_br]	= (source[2] + source[source_stride * 2 + 2] + 1) >> 1;
+					setAlpha<num_output_channels>(next_pixel);
 				}
 			}
 			else
@@ -669,12 +680,14 @@ public:
 					cur_pixel[-1*swap_br]	= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;;
 					cur_pixel[0]			= (source[1] + source[source_stride] + source[source_stride + 2] + source[source_stride * 2 + 1] + 2) >> 2;;
 					cur_pixel[1*swap_br]	= source[source_stride + 1];
+					setAlpha<num_output_channels>(cur_pixel);
 
 					// Green pixel
 					uint8_t* next_pixel		= cur_pixel+num_output_channels;
 					next_pixel[-1*swap_br]	= (source[2] + source[source_stride * 2 + 2] + 1) >> 1;
 					next_pixel[0]			= source[source_stride + 2];
 					next_pixel[1*swap_br]	= (source[source_stride + 1] + source[source_stride + 3] + 1) >> 1;
+					setAlpha<num_output_channels>(next_pixel);
 				}
 			}
 
@@ -682,7 +695,8 @@ public:
 			{
 				dest[-1*swap_br]	= source[source_stride + 1];
 				dest[0]				= (source[1] + source[source_stride] + source[source_stride + 2] + source[source_stride * 2 + 1] + 2) >> 2;			
-				dest[1*swap_br]		= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;;			
+				dest[1*swap_br]		= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;
+				setAlpha<num_output_channels>(dest);
 
 				source++;
 				dest += num_output_channels;
@@ -693,6 +707,7 @@ public:
 			first_pixel[-1*swap_br]		= dest_row[-1*swap_br];
 			first_pixel[0]				= dest_row[0];
 			first_pixel[1*swap_br]		= dest_row[1*swap_br];
+			setAlpha<num_output_channels>(first_pixel);
 		
  			// Fill last pixel of row (copy second-to-last pixel). Note: dest row starts at the *second* pixel of the row, so dest_row + (width-2) * num_output_channels puts us at the last pixel of the row
 			uint8_t* last_pixel				= dest_row + (frame_width - 2)*num_output_channels;
@@ -701,6 +716,7 @@ public:
 			last_pixel[-1*swap_br]			= second_to_last_pixel[-1*swap_br];
 			last_pixel[0]					= second_to_last_pixel[0];
 			last_pixel[1*swap_br]			= second_to_last_pixel[1*swap_br];
+			setAlpha<num_output_channels>(last_pixel);
 		}
 
 		// Fill first & last row
@@ -981,6 +997,12 @@ static void LIBUSB_CALL transfer_completed_callback(struct libusb_transfer *xfr)
     }
 }
 
+template<>
+inline void FrameQueue::setAlpha<3>(uint8_t *destGreen) {}
+
+template<>
+inline void FrameQueue::setAlpha<4>(uint8_t *destGreen) { destGreen[2] = 255; }
+
 // PS3EYECam
 
 bool PS3EYECam::devicesEnumerated = false;
@@ -1209,6 +1231,10 @@ uint32_t PS3EYECam::getOutputBytesPerPixel() const
 		return 3;
 	else if (frame_output_format == EOutputFormat::RGB)
 		return 3;
+	else if (frame_output_format == EOutputFormat::BGRA)
+		return 4;
+	else if (frame_output_format == EOutputFormat::RGBA)
+		return 4;
 	else if (frame_output_format == EOutputFormat::Gray)
 		return 1;
 	return 0;
