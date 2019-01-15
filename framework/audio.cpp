@@ -170,7 +170,7 @@ int main(int argc, char * argv[])
 		logError("error: %s", errorString.c_str());
 	}
 	
-	GLuint texture = 0;
+	GxTexture texture;
 	
 	bool stressTest = false;
 	
@@ -198,32 +198,27 @@ int main(int argc, char * argv[])
 			
 			//
 			
-			if (texture != 0)
-				glDeleteTextures(1, &texture);
-			
 			if (CAM_GRAYSCALE)
 			{
-				texture = createTextureFromR8(imageData, CAM_SX, CAM_SY, false, true);
-				
-				glBindTexture(GL_TEXTURE_2D, texture);
-				GLint swizzleMask[4] = { GL_RED, GL_RED, GL_RED, GL_ONE };
-				glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
-				glBindTexture(GL_TEXTURE_2D, 0);
+				texture.allocate(CAM_SX, CAM_SY, GX_R8_UNORM, false, true);
+				texture.upload(imageData, 1, CAM_SX);
+				texture.setSwizzle(0, 0, 0, GX_SWIZZLE_ONE);
 			}
 			else
 			{
-				texture = createTextureFromRGB8(imageData, CAM_SX, CAM_SY, false, true);
+				texture.allocate(CAM_SX, CAM_SY, GX_RGB8_UNORM, false, true);
+				texture.upload(imageData, 1, CAM_SX);
 			}
 		}
 		
 		framework.beginDraw(0, 0, 0, 0);
 		{
-			if (texture != 0)
+			if (texture.isValid())
 			{
 				pushBlend(BLEND_OPAQUE);
 				{
 					setColor(colorWhite);
-					gxSetTexture(texture);
+					gxSetTexture(texture.id);
 					drawRect(0, 0, CAM_SX, CAM_SY);
 					gxSetTexture(0);
 				}
