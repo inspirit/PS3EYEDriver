@@ -1,0 +1,26 @@
+# chibi build file for the chibi build system ~ https://github.com/marcel303/chibi
+
+cmake_module_path cmake_modules
+
+library libps3eye
+	
+	scan_files cpp path ../src group sources
+	scan_files h   path ../src group sources
+
+	header_path ../src expose
+
+	depend_package LibUSB
+
+app libps3eye-example-video
+
+	depend_library libps3eye
+	depend_library framework
+
+	add_files video.cpp
+
+app libps3eye-example-audio
+
+	depend_library libps3eye
+	depend_library framework
+
+	add_files audio.cpp

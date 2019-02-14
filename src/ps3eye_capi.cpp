@@ -31,6 +31,7 @@
 #include "ps3eye.h"
 
 #include <list>
+#include <vector>
 
 struct ps3eye_context_t {
     ps3eye_context_t()

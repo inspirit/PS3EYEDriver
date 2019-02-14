@@ -1,10 +1,24 @@
 // source code from https://github.com/inspirit/PS3EYEDriver
 #include "ps3eye.h"
 
+// Get rid of annoying zero length structure warnings from libusb.h in MSVC
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4200)
+#endif
+
+#include "libusb.h"
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
+#include <vector>
 
 #if defined WIN32 || defined _WIN32 || defined WINCE
 	#include <windows.h>
@@ -68,6 +82,12 @@
 #ifdef _MSC_VER
 #pragma warning (disable: 4996) // 'This function or variable may be unsafe': snprintf
 #define snprintf _snprintf
+#endif
+
+#if defined(DEBUG) && 0
+#define debug(...) fprintf(stdout, __VA_ARGS__)
+#else
+#define debug(...)
 #endif
 
 namespace ps3eye {
@@ -424,6 +444,16 @@ int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
     return cnt;
 }
 
+void micStarted()
+{
+	USBMgr::instance()->cameraStarted();
+}
+
+void micStopped()
+{
+	USBMgr::instance()->cameraStopped();
+}
+
 static void LIBUSB_CALL transfer_completed_callback(struct libusb_transfer *xfr);
 
 class FrameQueue
@@ -530,8 +560,8 @@ public:
 		uint8_t*		dest_row		= outBuffer + dest_stride + 1; 	// We start outputting at the second pixel of the second row's G component
 		uint32_t R,G,B;
 		
-		// Fill rows 1 to height-1 of the destination buffer. First and last row are filled separately (they are copied from the second row and second-to-last rows respectively)
-		for (int y = 0; y < frame_height-1; source_row += source_stride, dest_row += dest_stride, ++y)
+		// Fill rows 1 to height-2 of the destination buffer. First and last row are filled separately (they are copied from the second row and second-to-last rows respectively)
+		for (int y = 0; y < frame_height-2; source_row += source_stride, dest_row += dest_stride, ++y)
 		{
 			const uint8_t* source		= source_row;
 			const uint8_t* source_end	= source + (source_stride-2);								// -2 to deal with the fact that we're starting at the second pixel of the row and should end at the second-to-last pixel of the row (first and last are filled separately)
@@ -634,8 +664,8 @@ public:
 		uint8_t*		dest_row				= outBuffer + dest_stride + num_output_channels + 1; 	// We start outputting at the second pixel of the second row's G component
 		int				swap_br					= inBGR ? 1 : -1;
 
-		// Fill rows 1 to height-1 of the destination buffer. First and last row are filled separately (they are copied from the second row and second-to-last rows respectively)
-		for (int y = 0; y < frame_height-1; source_row += source_stride, dest_row += dest_stride, ++y)
+		// Fill rows 1 to height-2 of the destination buffer. First and last row are filled separately (they are copied from the second row and second-to-last rows respectively)
+		for (int y = 0; y < frame_height-2; source_row += source_stride, dest_row += dest_stride, ++y)
 		{
 			const uint8_t* source		= source_row;
 			const uint8_t* source_end	= source + (source_stride-2);								// -2 to deal with the fact that we're starting at the second pixel of the row and should end at the second-to-last pixel of the row (first and last are filled separately)
@@ -817,6 +847,13 @@ public:
 		// Wait for cancelation to finish
 		num_active_transfers_condition.wait(lock, [this]() { return num_active_transfers == 0; });
 
+		// Free completed transfers
+		for (int index = 0; index < NUM_TRANSFERS; ++index)
+		{
+			libusb_free_transfer(xfr[index]);
+			xfr[index] = nullptr;
+		}
+		
 		USBMgr::instance()->cameraStopped();
 
 		free(transfer_buffer);
@@ -976,8 +1013,7 @@ static void LIBUSB_CALL transfer_completed_callback(struct libusb_transfer *xfr)
     if (status != LIBUSB_TRANSFER_COMPLETED) 
     {
         debug("transfer status %d\n", status);
-
-        libusb_free_transfer(xfr);
+        
 		urb->transfer_canceled();
         
         if(status != LIBUSB_TRANSFER_CANCELLED)
@@ -1037,7 +1073,7 @@ PS3EYECam::PS3EYECam(libusb_device *device)
 	greenblc = 128;
     flip_h = false;
     flip_v = false;
-
+    testPattern = false;
 	usb_buf = NULL;
 	handle_ = NULL;
 
@@ -1254,6 +1290,10 @@ bool PS3EYECam::open_usb()
 		return false;
 	}
 
+	// Linux has a kernel module for the PS3 eye camera (that's where most of the code in here comes from..)
+	// so we must detach the driver before we can hook up with the eye ourselves
+	libusb_detach_kernel_driver(handle_, 0);
+
 	//libusb_set_configuration(handle_, 0);
 
 	res = libusb_claim_interface(handle_, 0);
@@ -1269,6 +1309,7 @@ void PS3EYECam::close_usb()
 {
 	debug("closing device\n");
 	libusb_release_interface(handle_, 0);
+	libusb_attach_kernel_driver(handle_, 0);
 	libusb_close(handle_);
 	libusb_unref_device(device_);
 	handle_ = NULL;
