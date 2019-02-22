@@ -1010,22 +1010,20 @@ static void LIBUSB_CALL transfer_completed_callback(struct libusb_transfer *xfr)
     URBDesc *urb = reinterpret_cast<URBDesc*>(xfr->user_data);
     enum libusb_transfer_status status = xfr->status;
 
-    if (status != LIBUSB_TRANSFER_COMPLETED) 
-    {
-        debug("transfer status %d\n", status);
-        
+	if (status == LIBUSB_TRANSFER_CANCELLED) {
 		urb->transfer_canceled();
-        
-        if(status != LIBUSB_TRANSFER_CANCELLED)
-        {
-            urb->close_transfers();
-        }
-        return;
-    }
+		return;
+	}
 
     //debug("length:%u, actual_length:%u\n", xfr->length, xfr->actual_length);
 
-    urb->pkt_scan(xfr->buffer, xfr->actual_length);
+	if (status == LIBUSB_TRANSFER_COMPLETED) {
+		urb->pkt_scan(xfr->buffer, xfr->actual_length);
+	}
+	else {
+		OutputDebugString(L"LIBUSB TRANSFER ERROR");
+		urb->frame_add(DISCARD_PACKET, NULL, 0);
+	}
 
     if (libusb_submit_transfer(xfr) < 0) {
         debug("error re-submitting URB\n");
