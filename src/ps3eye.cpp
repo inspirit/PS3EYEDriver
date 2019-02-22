@@ -1,10 +1,24 @@
 // source code from https://github.com/inspirit/PS3EYEDriver
 #include "ps3eye.h"
 
+// Get rid of annoying zero length structure warnings from libusb.h in MSVC
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4200)
+#endif
+
+#include "libusb.h"
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
+#include <vector>
 
 #if defined WIN32 || defined _WIN32 || defined WINCE
 	#include <windows.h>
@@ -68,6 +82,12 @@
 #ifdef _MSC_VER
 #pragma warning (disable: 4996) // 'This function or variable may be unsafe': snprintf
 #define snprintf _snprintf
+#endif
+
+#if defined(DEBUG) && 0
+#define debug(...) fprintf(stdout, __VA_ARGS__)
+#else
+#define debug(...)
 #endif
 
 namespace ps3eye {
@@ -424,6 +444,16 @@ int USBMgr::listDevices( std::vector<PS3EYECam::PS3EYERef>& list )
     return cnt;
 }
 
+void micStarted()
+{
+	USBMgr::instance()->cameraStarted();
+}
+
+void micStopped()
+{
+	USBMgr::instance()->cameraStopped();
+}
+
 static void LIBUSB_CALL transfer_completed_callback(struct libusb_transfer *xfr);
 
 class FrameQueue
@@ -480,7 +510,7 @@ public:
 		return new_frame;
 	}
 
-	void Dequeue(uint8_t* new_frame, int frame_width, int frame_height, PS3EYECam::EOutputFormat outputFormat)
+	void Dequeue(uint8_t* new_frame, int frame_width, int frame_height, PS3EYECam::EOutputFormat outputFormat, bool flip_v)
 	{		
 		std::unique_lock<std::mutex> lock(mutex);
 
@@ -497,8 +527,13 @@ public:
 		else if (outputFormat == PS3EYECam::EOutputFormat::BGR ||
 				 outputFormat == PS3EYECam::EOutputFormat::RGB)
 		{
-			DebayerRGB(frame_width, frame_height, source, new_frame, outputFormat == PS3EYECam::EOutputFormat::BGR);
-		}		
+			DebayerRGB<3>(frame_width, frame_height, source, new_frame, outputFormat == PS3EYECam::EOutputFormat::BGR, flip_v);
+		}
+		else if (outputFormat == PS3EYECam::EOutputFormat::BGRA ||
+			outputFormat == PS3EYECam::EOutputFormat::RGBA)
+		{
+			DebayerRGB<4>(frame_width, frame_height, source, new_frame, outputFormat == PS3EYECam::EOutputFormat::BGRA, flip_v);
+		}
 		else if (outputFormat == PS3EYECam::EOutputFormat::Gray)
 		{
 			DebayerGray(frame_width, frame_height, source, new_frame);
@@ -525,8 +560,8 @@ public:
 		uint8_t*		dest_row		= outBuffer + dest_stride + 1; 	// We start outputting at the second pixel of the second row's G component
 		uint32_t R,G,B;
 		
-		// Fill rows 1 to height-1 of the destination buffer. First and last row are filled separately (they are copied from the second row and second-to-last rows respectively)
-		for (int y = 0; y < frame_height-1; source_row += source_stride, dest_row += dest_stride, ++y)
+		// Fill rows 1 to height-2 of the destination buffer. First and last row are filled separately (they are copied from the second row and second-to-last rows respectively)
+		for (int y = 0; y < frame_height-2; source_row += source_stride, dest_row += dest_stride, ++y)
 		{
 			const uint8_t* source		= source_row;
 			const uint8_t* source_end	= source + (source_stride-2);								// -2 to deal with the fact that we're starting at the second pixel of the row and should end at the second-to-last pixel of the row (first and last are filled separately)
@@ -608,7 +643,11 @@ public:
 		}
 	}
 
-	void DebayerRGB(int frame_width, int frame_height, const uint8_t* inBayer, uint8_t* outBuffer, bool inBGR)
+	template<int num_channels>
+	inline static void setAlpha(uint8_t *destGreen);
+
+	template<int num_output_channels>
+	void DebayerRGB(int frame_width, int frame_height, const uint8_t* inBayer, uint8_t* outBuffer, bool inBGR, bool flip_v)
 	{
 		// PSMove output is in the following Bayer format (GRBG):
 		//
@@ -619,27 +658,27 @@ public:
 		//
 		// This is the normal Bayer pattern shifted left one place.
 
-		int				num_output_channels	    = 3;
 		int				source_stride			= frame_width;
 		const uint8_t*	source_row				= inBayer;												// Start at first bayer pixel
 		int				dest_stride				= frame_width * num_output_channels;
 		uint8_t*		dest_row				= outBuffer + dest_stride + num_output_channels + 1; 	// We start outputting at the second pixel of the second row's G component
 		int				swap_br					= inBGR ? 1 : -1;
 
-		// Fill rows 1 to height-1 of the destination buffer. First and last row are filled separately (they are copied from the second row and second-to-last rows respectively)
-		for (int y = 0; y < frame_height-1; source_row += source_stride, dest_row += dest_stride, ++y)
+		// Fill rows 1 to height-2 of the destination buffer. First and last row are filled separately (they are copied from the second row and second-to-last rows respectively)
+		for (int y = 0; y < frame_height-2; source_row += source_stride, dest_row += dest_stride, ++y)
 		{
 			const uint8_t* source		= source_row;
 			const uint8_t* source_end	= source + (source_stride-2);								// -2 to deal with the fact that we're starting at the second pixel of the row and should end at the second-to-last pixel of the row (first and last are filled separately)
 			uint8_t* dest				= dest_row;		
 
 			// Row starting with Green
-			if (y % 2 == 0)
+			if (y % 2 == (int)flip_v)
 			{
 				// Fill first pixel (green)
 				dest[-1*swap_br]	= (source[source_stride] + source[source_stride + 2] + 1) >> 1;
 				dest[0]				= source[source_stride + 1];
-				dest[1*swap_br]		= (source[1] + source[source_stride * 2 + 1] + 1) >> 1;		
+				dest[1*swap_br]		= (source[1] + source[source_stride * 2 + 1] + 1) >> 1;
+				setAlpha<num_output_channels>(dest);
 
 				source++;
 				dest += num_output_channels;
@@ -651,13 +690,15 @@ public:
 					uint8_t* cur_pixel	= dest;
 					cur_pixel[-1*swap_br]	= source[source_stride + 1];
 					cur_pixel[0]			= (source[1] + source[source_stride] + source[source_stride + 2] + source[source_stride * 2 + 1] + 2) >> 2;
-					cur_pixel[1*swap_br]	= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;				
+					cur_pixel[1*swap_br]	= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;
+					setAlpha<num_output_channels>(cur_pixel);
 
 					//  Green pixel
 					uint8_t* next_pixel		= cur_pixel+num_output_channels;
 					next_pixel[-1*swap_br]	= (source[source_stride + 1] + source[source_stride + 3] + 1) >> 1;					
 					next_pixel[0]			= source[source_stride + 2];
 					next_pixel[1*swap_br]	= (source[2] + source[source_stride * 2 + 2] + 1) >> 1;
+					setAlpha<num_output_channels>(next_pixel);
 				}
 			}
 			else
@@ -669,12 +710,14 @@ public:
 					cur_pixel[-1*swap_br]	= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;;
 					cur_pixel[0]			= (source[1] + source[source_stride] + source[source_stride + 2] + source[source_stride * 2 + 1] + 2) >> 2;;
 					cur_pixel[1*swap_br]	= source[source_stride + 1];
+					setAlpha<num_output_channels>(cur_pixel);
 
 					// Green pixel
 					uint8_t* next_pixel		= cur_pixel+num_output_channels;
 					next_pixel[-1*swap_br]	= (source[2] + source[source_stride * 2 + 2] + 1) >> 1;
 					next_pixel[0]			= source[source_stride + 2];
 					next_pixel[1*swap_br]	= (source[source_stride + 1] + source[source_stride + 3] + 1) >> 1;
+					setAlpha<num_output_channels>(next_pixel);
 				}
 			}
 
@@ -682,7 +725,8 @@ public:
 			{
 				dest[-1*swap_br]	= source[source_stride + 1];
 				dest[0]				= (source[1] + source[source_stride] + source[source_stride + 2] + source[source_stride * 2 + 1] + 2) >> 2;			
-				dest[1*swap_br]		= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;;			
+				dest[1*swap_br]		= (source[0] + source[2] + source[source_stride * 2] + source[source_stride * 2 + 2] + 2) >> 2;
+				setAlpha<num_output_channels>(dest);
 
 				source++;
 				dest += num_output_channels;
@@ -693,6 +737,7 @@ public:
 			first_pixel[-1*swap_br]		= dest_row[-1*swap_br];
 			first_pixel[0]				= dest_row[0];
 			first_pixel[1*swap_br]		= dest_row[1*swap_br];
+			setAlpha<num_output_channels>(first_pixel);
 		
  			// Fill last pixel of row (copy second-to-last pixel). Note: dest row starts at the *second* pixel of the row, so dest_row + (width-2) * num_output_channels puts us at the last pixel of the row
 			uint8_t* last_pixel				= dest_row + (frame_width - 2)*num_output_channels;
@@ -701,6 +746,7 @@ public:
 			last_pixel[-1*swap_br]			= second_to_last_pixel[-1*swap_br];
 			last_pixel[0]					= second_to_last_pixel[0];
 			last_pixel[1*swap_br]			= second_to_last_pixel[1*swap_br];
+			setAlpha<num_output_channels>(last_pixel);
 		}
 
 		// Fill first & last row
@@ -801,6 +847,13 @@ public:
 		// Wait for cancelation to finish
 		num_active_transfers_condition.wait(lock, [this]() { return num_active_transfers == 0; });
 
+		// Free completed transfers
+		for (int index = 0; index < NUM_TRANSFERS; ++index)
+		{
+			libusb_free_transfer(xfr[index]);
+			xfr[index] = nullptr;
+		}
+		
 		USBMgr::instance()->cameraStopped();
 
 		free(transfer_buffer);
@@ -957,29 +1010,32 @@ static void LIBUSB_CALL transfer_completed_callback(struct libusb_transfer *xfr)
     URBDesc *urb = reinterpret_cast<URBDesc*>(xfr->user_data);
     enum libusb_transfer_status status = xfr->status;
 
-    if (status != LIBUSB_TRANSFER_COMPLETED) 
-    {
-        debug("transfer status %d\n", status);
-
-        libusb_free_transfer(xfr);
+	if (status == LIBUSB_TRANSFER_CANCELLED) {
 		urb->transfer_canceled();
-        
-        if(status != LIBUSB_TRANSFER_CANCELLED)
-        {
-            urb->close_transfers();
-        }
-        return;
-    }
+		return;
+	}
 
     //debug("length:%u, actual_length:%u\n", xfr->length, xfr->actual_length);
 
-    urb->pkt_scan(xfr->buffer, xfr->actual_length);
+	if (status == LIBUSB_TRANSFER_COMPLETED) {
+		urb->pkt_scan(xfr->buffer, xfr->actual_length);
+	}
+	else {
+		OutputDebugString(L"LIBUSB TRANSFER ERROR");
+		urb->frame_add(DISCARD_PACKET, NULL, 0);
+	}
 
     if (libusb_submit_transfer(xfr) < 0) {
         debug("error re-submitting URB\n");
         urb->close_transfers();
     }
 }
+
+template<>
+inline void FrameQueue::setAlpha<3>(uint8_t *destGreen) {}
+
+template<>
+inline void FrameQueue::setAlpha<4>(uint8_t *destGreen) { destGreen[2] = 255; }
 
 // PS3EYECam
 
@@ -1015,7 +1071,7 @@ PS3EYECam::PS3EYECam(libusb_device *device)
 	greenblc = 128;
     flip_h = false;
     flip_v = false;
-
+    testPattern = false;
 	usb_buf = NULL;
 	handle_ = NULL;
 
@@ -1209,6 +1265,10 @@ uint32_t PS3EYECam::getOutputBytesPerPixel() const
 		return 3;
 	else if (frame_output_format == EOutputFormat::RGB)
 		return 3;
+	else if (frame_output_format == EOutputFormat::BGRA)
+		return 4;
+	else if (frame_output_format == EOutputFormat::RGBA)
+		return 4;
 	else if (frame_output_format == EOutputFormat::Gray)
 		return 1;
 	return 0;
@@ -1216,7 +1276,7 @@ uint32_t PS3EYECam::getOutputBytesPerPixel() const
 
 void PS3EYECam::getFrame(uint8_t* frame)
 {
-	urb->frame_queue->Dequeue(frame, frame_width, frame_height, frame_output_format);
+	urb->frame_queue->Dequeue(frame, frame_width, frame_height, frame_output_format, flip_v);
 }
 
 bool PS3EYECam::open_usb()
@@ -1227,6 +1287,10 @@ bool PS3EYECam::open_usb()
 		debug("device open error: %d\n", res);
 		return false;
 	}
+
+	// Linux has a kernel module for the PS3 eye camera (that's where most of the code in here comes from..)
+	// so we must detach the driver before we can hook up with the eye ourselves
+	libusb_detach_kernel_driver(handle_, 0);
 
 	//libusb_set_configuration(handle_, 0);
 
@@ -1243,6 +1307,7 @@ void PS3EYECam::close_usb()
 {
 	debug("closing device\n");
 	libusb_release_interface(handle_, 0);
+	libusb_attach_kernel_driver(handle_, 0);
 	libusb_close(handle_);
 	libusb_unref_device(device_);
 	handle_ = NULL;
