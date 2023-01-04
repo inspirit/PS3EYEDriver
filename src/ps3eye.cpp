@@ -330,7 +330,7 @@ USBMgr::USBMgr()
 	exit_signaled = false;
 	active_camera_count = 0;
     libusb_init(&usb_context);
-    libusb_set_debug(usb_context, 1);
+    libusb_set_option(usb_context, LIBUSB_OPTION_LOG_LEVEL, 1);
 }
 
 USBMgr::~USBMgr()
@@ -1223,6 +1223,7 @@ bool PS3EYECam::open_usb()
 {
 	// open, set first config and claim interface
 	int res = libusb_open(device_, &handle_);
+	libusb_set_auto_detach_kernel_driver(handle_, 1);
 	if(res != 0) {
 		debug("device open error: %d\n", res);
 		return false;
