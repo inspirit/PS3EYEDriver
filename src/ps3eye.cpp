@@ -330,7 +330,7 @@ USBMgr::USBMgr()
 	exit_signaled = false;
 	active_camera_count = 0;
     libusb_init(&usb_context);
-    libusb_set_debug(usb_context, 1);
+    libusb_set_option(usb_context, LIBUSB_OPTION_LOG_LEVEL, 1);
 }
 
 USBMgr::~USBMgr()
