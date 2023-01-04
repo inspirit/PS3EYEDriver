@@ -1223,6 +1223,7 @@ bool PS3EYECam::open_usb()
 {
 	// open, set first config and claim interface
 	int res = libusb_open(device_, &handle_);
+	libusb_set_auto_detach_kernel_driver(handle_, 1);
 	if(res != 0) {
 		debug("device open error: %d\n", res);
 		return false;
